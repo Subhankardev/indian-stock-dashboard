@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+from typing import Literal
+
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from app.nse_data import get_stock_data, get_option_chain
+from app.nse_data import get_stock_data, get_option_chain, get_price_oi_history
 from app.strategies import analyze_stock
 from app.option_analytics import analyze_option_chain
+from app.wave_oi import BacktestConfig, StrategyConfig, build_report, make_synthetic
 
 app = FastAPI(title="Indian Stock Market Analytics API")
 
@@ -40,3 +43,39 @@ def trending_stocks(limit: int = 10):
         except Exception:
             continue
     return results
+
+
+@app.get("/api/wave-oi/{symbol}")
+def wave_oi_analysis(
+    symbol: str,
+    days: int = Query(730, ge=120, le=3650, description="Calendar days of daily history"),
+    source: Literal["nse", "synthetic"] = Query("nse", description="'synthetic' = offline demo data"),
+    use_wave: bool = True,
+    use_oi: bool = True,
+    allow_short: bool = True,
+    min_rr: float = Query(1.5, ge=0.0, le=10.0),
+    zz_atr_mult: float = Query(2.5, gt=0.0, le=10.0, description="Swing size in ATRs"),
+    risk_per_trade: float = Query(0.01, gt=0.0, le=0.1),
+    fee_bps: float = Query(5.0, ge=0.0, le=100.0),
+):
+    """Elliott wave structure + Ghost Trade Indicator + open-interest confirmation,
+    with the latest signal and a backtest of the same rules."""
+    warning = None
+    if source == "synthetic":
+        df = make_synthetic(bars=int(days * 250 / 365))
+    else:
+        try:
+            df, warning = get_price_oi_history(symbol, days)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Could not fetch NSE data for {symbol}: {exc}")
+    if len(df) < 60:
+        raise HTTPException(status_code=422, detail=f"Need at least 60 daily bars, got {len(df)}")
+
+    cfg = StrategyConfig(
+        use_wave=use_wave, use_oi=use_oi, allow_short=allow_short,
+        min_rr=min_rr, zz_atr_mult=zz_atr_mult,
+    )
+    bt_cfg = BacktestConfig(risk_per_trade=risk_per_trade, fee_bps=fee_bps)
+    report = build_report(df, symbol, cfg, bt_cfg, source=source)
+    report["warning"] = warning
+    return report
