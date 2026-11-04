@@ -1,5 +1,8 @@
 fastapi
 uvicorn
 pandas
+numpy
 requests
 python-multipart
+websockets>=13
+protobuf>=4.25
