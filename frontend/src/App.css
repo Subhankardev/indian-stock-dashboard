@@ -58,3 +58,27 @@ tbody tr:hover { background: #f0f4ff; }
 .dot.wait { background: #f59e0b; }
 .dot.off { background: #dc2626; }
 @media (max-width: 640px) { .live-grid { grid-template-columns: 1fr; } }
+
+.expiry { display: inline-block; margin-bottom: 10px; font-size: 13px; }
+.chain-wrap { overflow-x: auto; }
+table.chain { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+table.chain th { text-align: center; background: #f3f4f6; }
+table.chain th.calls { color: #b91c1c; }
+table.chain th.puts { color: #15803d; }
+table.chain td { text-align: right; padding: 4px 6px; white-space: nowrap; cursor: default; }
+table.chain td.strike { text-align: center; font-weight: 700; background: #f9fafb; }
+table.chain tbody tr:hover { background: #f8fafc; }
+table.chain tr.atm td { border-top: 2px solid #2563eb; border-bottom: 2px solid #2563eb; }
+table.chain tr.wall-ce td.strike { color: #b91c1c; }
+table.chain tr.wall-pe td.strike { color: #15803d; }
+table.chain td.strike.itm-ce { box-shadow: inset 4px 0 0 #fde68a; }
+table.chain td.strike.itm-pe { box-shadow: inset -4px 0 0 #fde68a; }
+.oi-bar { position: relative; min-width: 110px; height: 16px; }
+.oi-bar span { position: absolute; top: 2px; bottom: 2px; opacity: .25; border-radius: 2px; }
+.oi-bar.left span { right: 0; background: #dc2626; }
+.oi-bar.right span { left: 0; background: #16a34a; }
+.oi-bar.right b { position: relative; float: left; }
+.oi-bar.left b { position: relative; }
+.tag { display: block; font-size: 10px; color: #6b7280; }
+.tag.up { color: #15803d; }
+.tag.down { color: #b91c1c; }

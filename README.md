@@ -6,7 +6,7 @@ A full-stack web dashboard for real-time Indian stock market analytics, includin
 
 - **Trending Stock Screener**: See which stocks are trending with signals (BUY/SELL/HOLD).
 - **Technical Indicators**: SMA, RSI, MACD, Bollinger Bands.
-- **Option Chain Analytics**: PCR, OI-based support/resistance.
+- **Option Chain Analytics** (Upstox): PCR, max pain, OI walls, ATM IV and expected move, OI build-ups per strike (see below).
 - **Wave · GTI · OI Analysis**: Elliott wave structure, Ghost Trade Indicator and futures open interest combined into signals, with a backtest (see below).
 - **Real-Time**: Data updates every few minutes.
 
@@ -54,6 +54,22 @@ npm start
 - Go to http://localhost:3000
 - Click any stock for details and option analytics, or type an NSE symbol and press **Analyze**.
 - Tick **demo data** to see the Wave · GTI · OI panel on synthetic data (useful when NSE blocks your network).
+
+## Option chain (Upstox)
+
+`GET /api/options/{symbol}?expiry=YYYY-MM-DD` works for stocks (`RELIANCE`) and indices (`NIFTY`, `BANKNIFTY`, `FINNIFTY`, …). Code: `backend/app/option_analytics.py`, with fetching in `backend/app/upstox_data.py`.
+
+- **Upstox expiries** come from the instrument file, which needs no token and also maps `NIFTY` → `NSE_INDEX|Nifty 50`. The chain itself comes from `GET /v2/option/chain` and **needs `UPSTOX_ACCESS_TOKEN`**. It is cached for 30 seconds, and the dashboard refreshes it every minute.
+- **Analytics:**
+  - put-call ratio by OI and by volume
+  - **max pain**
+  - **OI walls**: the biggest call OI at or above spot is resistance, and the biggest put OI at or below spot is support
+  - ATM IV, ATM straddle price and the **expected move** it implies
+  - biggest OI changes vs the previous day
+  - a per-contract **build-up** tag from that contract's price and OI change: long build-up, short build-up, short covering, long unwinding
+- Parameters: `expiry` (default: nearest), `source=upstox|nse|synthetic`, `window` (strikes either side of ATM in `rows`; `0` = all), `spot` (for `synthetic`).
+- The original response keys (`PCR`, `max_CE_OI_strike`, `max_PE_OI_strike`, `total_CE_OI`, `total_PE_OI`, `OI_data`) are still returned. With `DATA_SOURCE=nse`, the NSE chain goes through the same analytics and is now filtered to one expiry.
+- On the dashboard, the option chain panel has an expiry picker, summary cards and a strike table with OI bars centred on ATM. The "demo data" box shows a demo chain.
 
 ## Wave Theory + Ghost Trade Indicator + Open Interest
 
