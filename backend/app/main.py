@@ -8,8 +8,10 @@ from app.nse_data import get_stock_data, get_option_chain
 from app.strategies import analyze_stock
 from app.option_analytics import analyze_option_chain
 from app.wave_oi import BacktestConfig, StrategyConfig, build_report, make_synthetic
+from app.live import routes as live_routes
 
-app = FastAPI(title="Indian Stock Market Analytics API")
+app = FastAPI(title="Indian Stock Market Analytics API", lifespan=live_routes.lifespan)
+app.include_router(live_routes.router)
 
 # "upstox" (default) or "nse": where price / OI history comes from.
 DATA_SOURCE = os.getenv("DATA_SOURCE", "upstox").lower()

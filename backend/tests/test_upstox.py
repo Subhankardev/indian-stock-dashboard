@@ -165,3 +165,10 @@ def test_expired_token_message():
 
     with pytest.raises(UpstoxError, match="access token"):
         UpstoxClient(access_token="old", session=Unauthorized()).price_oi_history("RELIANCE", days=200)
+
+
+def test_live_legs_picks_near_future_and_previous_day_oi():
+    s = FakeSession()
+    legs = UpstoxClient(access_token="tok", session=s).live_legs("reliance")
+    assert legs["EQ"] == EQ_KEY and legs["FUT"] == "NSE_FO|111"
+    assert legs["prev_oi"] == 1059  # last completed day's OI of the near-month contract

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import LiveQuote from "./LiveQuote";
 
 const API = "http://localhost:8000";
 const fmt = (v, d = 2) => (v === null || v === undefined ? "–" : Number(v).toFixed(d));
@@ -141,6 +142,20 @@ function WaveOIPanel({ symbol, demo = false }) {
         Wave · GTI · OI — {data.symbol} <small>as of {data.as_of}{data.source === "synthetic" ? " (demo data)" : ""}</small>
       </h3>
       {data.warning && <p className="warn">{data.warning}</p>}
+
+      <LiveQuote
+        symbol={data.symbol}
+        demo={data.source === "synthetic"}
+        demoBase={latest.close && Number(latest.close).toFixed(2)}
+        levels={{
+          gtiDir: latest.gti.direction,
+          gtiLine: latest.gti.line,
+          waveDir: latest.wave.direction,
+          waveLabel: latest.wave.label,
+          stop: latest.wave.stop,
+          target: latest.wave.target,
+        }}
+      />
 
       <div className="cards">
         <div className="card">

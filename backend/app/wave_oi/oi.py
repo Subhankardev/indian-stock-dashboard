@@ -28,6 +28,15 @@ from .indicators import atr
 REGIMES = ("new_longs", "short_covering", "new_shorts", "long_liquidation", "neutral")
 
 
+def classify_regime(price_change: float | None, oi_change: float | None, min_oi_change: float = 0.01) -> str:
+    """Scalar version of ``oi_regime`` (fractions, e.g. 0.012 = +1.2%) for live ticks."""
+    if price_change is None or oi_change is None or price_change == 0 or abs(oi_change) < min_oi_change:
+        return "neutral"
+    if price_change > 0:
+        return "new_longs" if oi_change > 0 else "short_covering"
+    return "new_shorts" if oi_change > 0 else "long_liquidation"
+
+
 def has_oi(df: pd.DataFrame) -> bool:
     return "open_interest" in df.columns and df["open_interest"].notna().sum() > 1
 

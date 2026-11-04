@@ -101,6 +101,28 @@ curl "http://localhost:8000/api/wave-oi/DEMO?source=synthetic"
 
 If futures OI can't be fetched (for example a non-F&O stock), the analysis still runs without OI confirmation and the response includes a `warning`.
 
+### Live feed (Upstox WebSocket)
+
+The panel's top strip streams live data from the [Upstox Market Data Feed V3](https://upstox.com/developer/api-documentation/api-overview). Code is in `backend/app/live/`.
+
+```
+Upstox wss://api.upstox.com/v3/feed/market-data-feed   (protobuf, one connection, token stays on the server)
+        │
+   backend LiveHub   ── reference-counted subscriptions, latest-tick cache, reconnect with backoff
+        │
+   ws://localhost:8000/ws/live?symbols=RELIANCE   (JSON, one per browser tab)
+        │
+   LiveQuote strip in the Wave · GTI · OI panel
+```
+
+- For each symbol it streams the **equity** and its **near-month future** in `full` mode. The strip shows last price, change vs previous close, bid/ask, day O/H/L, volume, futures price and basis, and **live OI vs the previous day's OI**. It also shows a live price/OI read: fresh longs, short covering, fresh shorts or long liquidation (0.5% OI threshold).
+- It compares the live price with the levels from the daily analysis. You see a warning when price crosses the GTI line ("GTI flips if it closes here") or breaks the wave stop or target, and otherwise the % distance to each.
+- **Needs `UPSTOX_ACCESS_TOKEN`** on the backend. Without it the endpoint returns a clear error. In demo mode, or with `&source=mock`, a random-walk mock feed is used instead.
+- It uses its own small client rather than the Upstox SDK. The SDK doesn't install on Python 3.13 (it depends on the obsolete PyPI `uuid` package) and turns off TLS certificate checking. The protobuf schema comes from the SDK (MIT licence). A readable copy is in `app/live/MarketDataFeedV3.proto`.
+- `GET /api/live/status` shows the upstream connection state, subscribed keys and viewer count.
+
+Messages sent to the browser: `hello`, `tick` (`{symbol, leg: "EQ"|"FUT", tick, live}`), `feed_status`, `market_status`, `error`. See `app/live/routes.py`.
+
 ### Tests
 
 ```bash
@@ -109,7 +131,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The tests cover the wave rules and the setup levels, OI quadrants, GTI flips, backtest accounting and the API. One test checks for look-ahead: it computes signals on truncated history and requires them to match the full-history signals.
+The tests also cover the Upstox data and live-feed code against fake Upstox responses, and the browser WebSocket end to end in mock mode. Beyond that, they cover the wave rules and the setup levels, OI quadrants, GTI flips, backtest accounting and the API. One test checks for look-ahead: it computes signals on truncated history and requires them to match the full-history signals.
 
 > Educational tool, not investment advice. Wave counts are probabilistic and NSE endpoints are unofficial.
 

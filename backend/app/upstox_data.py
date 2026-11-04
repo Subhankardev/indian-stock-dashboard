@@ -225,6 +225,26 @@ class UpstoxClient:
         return df, " ".join(warnings) or None
 
 
+    def live_legs(self, symbol: str) -> dict:
+        """Instrument keys to stream for a symbol: the equity and its near-month future,
+        plus the future's previous-day OI (the baseline for today's OI change)."""
+        instruments = self.instruments()
+        eq = find_equity(instruments, symbol)
+        legs = {"symbol": symbol.upper(), "EQ": eq["instrument_key"], "FUT": None,
+                "fut_symbol": None, "prev_oi": None}
+        futs = [f for f in find_futures(instruments, symbol)
+                if (f.get("expiry") or 0) / 1000 >= time.time() - 86_400]
+        if futs:
+            near = futs[0]
+            legs.update(FUT=near["instrument_key"], fut_symbol=near.get("trading_symbol"))
+            today = date.today()
+            hist = self.daily_candles(near["instrument_key"], today - timedelta(days=10), today, include_today=False)
+            hist = hist[hist.index < pd.Timestamp(today)]
+            if len(hist) and pd.notna(hist["open_interest"].iloc[-1]):
+                legs["prev_oi"] = float(hist["open_interest"].iloc[-1])
+        return legs
+
+
 _default_client: Optional[UpstoxClient] = None
 
 
