@@ -216,7 +216,7 @@ function WaveOIPanel({ symbol, demo = false }) {
           </tbody>
         </table>
       )}
-      <p className="disclaimer">Educational tool, not investment advice. Wave counts are probabilistic and NSE data is unofficial.</p>
+      <p className="disclaimer">Educational tool, not investment advice. Wave counts are probabilistic; check data against your broker before trading.</p>
     </div>
   );
 }

@@ -1,13 +1,24 @@
+import os
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from app.nse_data import get_stock_data, get_option_chain, get_price_oi_history
+from app import nse_data, upstox_data
+from app.nse_data import get_stock_data, get_option_chain
 from app.strategies import analyze_stock
 from app.option_analytics import analyze_option_chain
 from app.wave_oi import BacktestConfig, StrategyConfig, build_report, make_synthetic
 
 app = FastAPI(title="Indian Stock Market Analytics API")
+
+# "upstox" (default) or "nse": where price / OI history comes from.
+DATA_SOURCE = os.getenv("DATA_SOURCE", "upstox").lower()
+
+
+def load_daily_prices(symbol: str):
+    if DATA_SOURCE == "upstox":
+        return upstox_data.get_daily_prices(symbol)
+    return get_stock_data(symbol)
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,7 +29,7 @@ app.add_middleware(
 
 @app.get("/api/stock/{symbol}")
 def stock_analysis(symbol: str):
-    df = get_stock_data(symbol)
+    df = load_daily_prices(symbol)
     analysis = analyze_stock(df)
     return analysis
 
@@ -34,7 +45,7 @@ def trending_stocks(limit: int = 10):
     results = []
     for symbol in NIFTY_50:
         try:
-            df = get_stock_data(symbol)
+            df = load_daily_prices(symbol)
             analysis = analyze_stock(df)
             if analysis["signal"] != "HOLD":
                 results.append({"symbol": symbol, **analysis})
@@ -49,7 +60,8 @@ def trending_stocks(limit: int = 10):
 def wave_oi_analysis(
     symbol: str,
     days: int = Query(730, ge=120, le=3650, description="Calendar days of daily history"),
-    source: Literal["nse", "synthetic"] = Query("nse", description="'synthetic' = offline demo data"),
+    source: Literal["default", "upstox", "nse", "synthetic"] = Query(
+        "default", description="'default' follows DATA_SOURCE; 'synthetic' = offline demo data"),
     use_wave: bool = True,
     use_oi: bool = True,
     allow_short: bool = True,
@@ -61,13 +73,16 @@ def wave_oi_analysis(
     """Elliott wave structure + Ghost Trade Indicator + open-interest confirmation,
     with the latest signal and a backtest of the same rules."""
     warning = None
+    if source == "default":
+        source = DATA_SOURCE
     if source == "synthetic":
         df = make_synthetic(bars=int(days * 250 / 365))
     else:
+        provider = upstox_data if source == "upstox" else nse_data
         try:
-            df, warning = get_price_oi_history(symbol, days)
+            df, warning = provider.get_price_oi_history(symbol, days)
         except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Could not fetch NSE data for {symbol}: {exc}")
+            raise HTTPException(status_code=502, detail=f"Could not fetch {source} data for {symbol}: {exc}")
     if len(df) < 60:
         raise HTTPException(status_code=422, detail=f"Need at least 60 daily bars, got {len(df)}")
 

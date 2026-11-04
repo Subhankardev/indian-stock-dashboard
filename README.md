@@ -14,7 +14,7 @@ A full-stack web dashboard for real-time Indian stock market analytics, includin
 
 - **Frontend**: React
 - **Backend**: FastAPI (Python)
-- **Data**: NSE India (unofficial APIs)
+- **Data**: Upstox API (default) or NSE India (unofficial APIs)
 - **Deployment**: Docker
 
 ## Setup
@@ -57,7 +57,31 @@ npm start
 
 ## Wave Theory + Ghost Trade Indicator + Open Interest
 
-Code: `backend/app/wave_oi/`. Endpoint: `GET /api/wave-oi/{symbol}`. It uses daily NSE equity prices plus stock-futures OI summed across expiries.
+Code: `backend/app/wave_oi/`. Endpoint: `GET /api/wave-oi/{symbol}`. It uses daily equity prices plus stock-futures OI summed across expiries.
+
+### Data source: Upstox (default)
+
+Price and OI come from the [Upstox API](https://upstox.com/developer/api-documentation/api-overview) (`backend/app/upstox_data.py`):
+
+- Upstox's daily instrument file maps a symbol like `RELIANCE` to its equity and futures instrument keys.
+- Daily candles come from `/v3/historical-candle/...`, plus today's bar from the intraday endpoint. Each row is `[timestamp, open, high, low, close, volume, open_interest]`, so futures candles carry OI directly.
+- OI is summed across all futures contracts on the stock. That gives the total market position and smooths the month-end rollover.
+
+Configuration (see `backend/.env.example`):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DATA_SOURCE` | `upstox` | `upstox` or `nse` (the old unofficial NSE endpoints) |
+| `UPSTOX_ACCESS_TOKEN` | *(empty)* | Optional. Candle data is public. Without a token, OI covers only the live futures contracts (about 3 months back). With a token, expired contracts are fetched through `/v2/expired-instruments/...` and OI history goes back further. Upstox tokens expire daily. |
+| `UPSTOX_MAX_EXPIRED` | `24` | How many expired monthly contracts to pull |
+
+```bash
+cd backend
+export UPSTOX_ACCESS_TOKEN=...   # optional
+uvicorn app.main:app --reload
+```
+
+On bars before OI history starts, signals are not OI-filtered, and the response's `warning` says from which date OI applies. `?source=upstox|nse|synthetic` overrides `DATA_SOURCE` for a single request.
 
 | Piece | What it does | File |
 |---|---|---|
@@ -68,7 +92,7 @@ Code: `backend/app/wave_oi/`. Endpoint: `GET /api/wave-oi/{symbol}`. It uses dai
 | **Signal** | **BUY** when the wave setup points up, GTI is up, OI confirms (`new_longs` or a recent bullish ghost build-up) and reward:risk ≥ `min_rr` (default 1.5). **SELL** is the mirror image. | `strategy.py` |
 | **Backtest** | Fills at the next bar's open, sizes each trade to risk 1% of equity, checks the stop before the target within a bar, and exits on a GTI flip against the trade. Charges 5 bps per side. | `backtest.py` |
 
-Query parameters: `days`, `source=nse|synthetic`, `use_wave`, `use_oi`, `allow_short`, `min_rr`, `zz_atr_mult`, `risk_per_trade`, `fee_bps`.
+Query parameters: `days`, `source=upstox|nse|synthetic`, `use_wave`, `use_oi`, `allow_short`, `min_rr`, `zz_atr_mult`, `risk_per_trade`, `fee_bps`.
 
 ```bash
 curl "http://localhost:8000/api/wave-oi/RELIANCE?days=730"

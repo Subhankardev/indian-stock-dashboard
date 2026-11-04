@@ -105,7 +105,8 @@ def analyze(df: pd.DataFrame, cfg: StrategyConfig | None = None) -> tuple[pd.Dat
         if use_oi:
             regimes = cfg.long_oi_regimes if sign == 1 else cfg.short_oi_regimes
             ghost = recent_ghost_up if sign == 1 else recent_ghost_dn
-            oi_cond = out["oi_regime"].isin(regimes) | ghost
+            # Bars before OI history begins can't be confirmed either way: don't filter them.
+            oi_cond = out["oi_regime"].isin(regimes) | ghost | out["oi_change"].isna()
         else:
             oi_cond = pd.Series(True, index=out.index)
         cond = wave_cond & (out["gti_dir"] == sign) & oi_cond & (rr >= cfg.min_rr)
