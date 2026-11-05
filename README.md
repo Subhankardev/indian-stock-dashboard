@@ -6,6 +6,7 @@ A full-stack web dashboard for real-time Indian stock market analytics, includin
 
 - **Trending Stock Screener**: See which stocks are trending with signals (BUY/SELL/HOLD).
 - **Technical Indicators**: SMA, RSI, MACD, Bollinger Bands.
+- **Buy/Sell Alerts**: watchlist scanner with forming / confirmed signal alerts and desktop notifications (see below).
 - **Option Chain Analytics** (Upstox): PCR, max pain, OI walls, ATM IV and expected move, OI build-ups per strike (see below).
 - **Wave · GTI · OI Analysis**: Elliott wave structure, Ghost Trade Indicator and futures open interest combined into signals, with a backtest (see below).
 - **Real-Time**: Data updates every few minutes.
@@ -54,6 +55,35 @@ npm start
 - Go to http://localhost:3000
 - Click any stock for details and option analytics, or type an NSE symbol and press **Analyze**.
 - Tick **demo data** to see the Wave · GTI · OI panel on synthetic data (useful when NSE blocks your network).
+
+## Buy/Sell alerts
+
+The 🔔 **Signal alerts** panel watches a list of symbols and tells you when the Wave · GTI · OI rules fire a BUY or SELL. Code: `backend/app/alerts/`.
+
+**How it works:**
+- A scanner in the backend re-runs the strategy for each watched symbol. It runs **every minute while NSE is open** (Mon–Fri 09:15–15:30 IST) and every 10 minutes otherwise.
+- During market hours, the last daily bar is **today's forming bar**, built from Upstox's intraday candle and refreshed every 60 s. That gives three kinds of alert:
+  - **forming**: the signal would fire if the day closed at the current price. This is an early heads-up and can still change.
+  - **faded**: a forming signal disappeared, either intraday or because it didn't hold into the close.
+  - **confirmed**: the signal is on a completed daily bar. This is the one the backtest trades. Each confirmed signal is alerted once.
+- Every alert includes the price, stop, target and the reason (wave setup, GTI and OI state).
+
+**In the dashboard:**
+- Add symbols with **+ Watch SYMBOL** or the *add symbol* box; remove them with ×.
+- Click **Enable desktop notifications** once. On macOS, the browser also needs notifications allowed in *System Settings → Notifications*.
+- **Send test alert** checks that notifications and sound work. **Scan now** runs a scan straight away.
+- Clicking a notification opens that symbol.
+
+The dashboard tab must be open to receive notifications; the backend keeps scanning and records alerts either way. The watchlist and alert history are saved in `backend/.alerts.json` (gitignored), so a restart doesn't re-alert.
+
+**API:**
+- `GET /api/alerts?since=<id>`
+- `PUT /api/alerts/watchlist` with body `{"symbols": [...]}`
+- `POST` or `DELETE /api/alerts/watchlist/{symbol}`
+- `POST /api/alerts/scan`
+- `POST /api/alerts/test`
+
+**Environment variables:** `ALERTS_FILE`, `ALERTS_ENABLED` (`0` turns the scanner off), `ALERTS_INTERVAL` (seconds while the market is open; default 60).
 
 ## Option chain (Upstox)
 

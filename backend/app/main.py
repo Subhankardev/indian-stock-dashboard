@@ -9,10 +9,21 @@ from app.nse_data import get_stock_data, get_option_chain
 from app.strategies import analyze_stock
 from app.option_analytics import analyze_chain, normalise_nse_chain, synthetic_chain
 from app.wave_oi import BacktestConfig, StrategyConfig, build_report, make_synthetic
-from app.live import routes as live_routes
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="Indian Stock Market Analytics API", lifespan=live_routes.lifespan)
+from app.live import routes as live_routes
+from app.alerts import routes as alert_routes
+
+
+@asynccontextmanager
+async def lifespan(app):
+    async with live_routes.lifespan(app), alert_routes.lifespan(app):
+        yield
+
+
+app = FastAPI(title="Indian Stock Market Analytics API", lifespan=lifespan)
 app.include_router(live_routes.router)
+app.include_router(alert_routes.router)
 
 # "upstox" (default) or "nse": where price / OI history comes from.
 DATA_SOURCE = os.getenv("DATA_SOURCE", "upstox").lower()
