@@ -31,9 +31,28 @@ docker run -p 8000:8000 stock-backend
 Or for dev:
 
 ```bash
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env      # first time only: then put your tokens in .env
 uvicorn app.main:app --reload
 ```
+
+### Settings: `backend/.env`
+
+All settings live in `backend/.env`, which the backend reads at startup. Create it once from the template (`cp .env.example .env`) and fill in what you use:
+
+```ini
+UPSTOX_ACCESS_TOKEN=eyJ...          # regular token: daily; extended token: about a year
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+TELEGRAM_CHAT_ID=7844852392
+```
+
+- **Restart the backend after editing `.env`**. `--reload` only watches the code.
+- `.env` is gitignored, so it can't be committed by accident. Never commit tokens.
+- A variable exported in your terminal overrides `.env`, which is handy for one-off runs like `DATA_SOURCE=nse uvicorn ...`.
+- **`http://localhost:8000/api/config`** shows every setting the backend sees and where it came from (`.env`, shell, or not set), with secrets masked. Check it first when something "isn't picking up" a setting.
+- The tests never read `.env`, so your real tokens are never used during `pytest`.
 
 ### Frontend
 
@@ -82,14 +101,8 @@ Every alert can also go to Telegram, so it reaches your phone even when the dash
 
 1. In Telegram, message **@BotFather**, send `/newbot` and follow the prompts. It gives you a **bot token** like `123456:ABC-DEF…`.
 2. Open a chat with your new bot and send it any message, e.g. "hi".
-3. Start the backend with the token, then open `http://localhost:8000/api/alerts/telegram/chats`. It lists your `chat_id`:
-   ```bash
-   export TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
-   ```
-4. Restart the backend with both variables set. Then click **Telegram test** in the dashboard, or `POST /api/alerts/telegram/test`:
-   ```bash
-   export TELEGRAM_CHAT_ID=your_chat_id
-   ```
+3. Put the token in `backend/.env` as `TELEGRAM_BOT_TOKEN=123456:ABC-DEF...` and restart the backend. Then open `http://localhost:8000/api/alerts/telegram/chats`, which lists your `chat_id`.
+4. Add `TELEGRAM_CHAT_ID=<that number>` to `backend/.env` and restart the backend. The alerts panel should say "Telegram alerts on". Click **Telegram test**, or call `POST /api/alerts/telegram/test`.
 
 Optional: `TELEGRAM_ALERT_KINDS=confirmed` sends only confirmed signals. The default is `forming,confirmed,faded,test`.
 
@@ -137,19 +150,15 @@ Price and OI come from the [Upstox API](https://upstox.com/developer/api-documen
 - Daily candles come from `/v3/historical-candle/...`, plus today's bar from the intraday endpoint. Each row is `[timestamp, open, high, low, close, volume, open_interest]`, so futures candles carry OI directly.
 - OI is summed across all futures contracts on the stock. That gives the total market position and smooths the month-end rollover.
 
-Configuration (see `backend/.env.example`):
+Configuration (in `backend/.env`; see `backend/.env.example`):
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `DATA_SOURCE` | `upstox` | `upstox` or `nse` (the old unofficial NSE endpoints) |
-| `UPSTOX_ACCESS_TOKEN` | *(empty)* | Optional. Candle data is public. Without a token, OI covers only the live futures contracts (about 3 months back). With a token, expired contracts are fetched through `/v2/expired-instruments/...` and OI history goes back further. Upstox tokens expire daily. |
+| `UPSTOX_ACCESS_TOKEN` | *(empty)* | Optional. Candle data is public. Without a token, OI covers only the live futures contracts (about 3 months back). With a token, expired contracts are fetched through `/v2/expired-instruments/...` and OI history goes back further. A regular Upstox token expires daily; an *extended* token lasts about a year (treat it like a password). |
 | `UPSTOX_MAX_EXPIRED` | `24` | How many expired monthly contracts to pull |
 
-```bash
-cd backend
-export UPSTOX_ACCESS_TOKEN=...   # optional
-uvicorn app.main:app --reload
-```
+Set these in `backend/.env` (see *Settings* above) and restart the backend.
 
 On bars before OI history starts, signals are not OI-filtered, and the response's `warning` says from which date OI applies. `?source=upstox|nse|synthetic` overrides `DATA_SOURCE` for a single request.
 
