@@ -3,6 +3,7 @@ import StockTable from "./components/StockTable";
 import StockDetail from "./components/StockDetail";
 import WaveOIPanel from "./components/WaveOIPanel";
 import OptionChainPanel from "./components/OptionChainPanel";
+import AlertsPanel from "./components/AlertsPanel";
 import './App.css';
 
 function App() {
@@ -31,6 +32,10 @@ function App() {
         <button type="submit">Analyze</button>
         <label><input type="checkbox" checked={demo} onChange={(e) => setDemo(e.target.checked)} /> demo data</label>
       </form>
+      <AlertsPanel
+        currentSymbol={demo ? null : selectedStock}
+        onSelect={(s) => { setDemo(false); setQuery(s); setSelectedStock(s); }}
+      />
       <StockTable stocks={trending} onSelect={setSelectedStock} />
       {selectedStock && (
         <>

@@ -84,3 +84,24 @@ table.chain td.strike.itm-pe { box-shadow: inset -4px 0 0 #fde68a; }
 .tag.down { color: #b91c1c; }
 
 button.small { font-size: 11px; padding: 1px 6px; margin-left: 4px; }
+
+.alerts-panel h3 { margin-top: 0; }
+.alerts-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; margin-bottom: 8px; }
+.alerts-controls .spacer { flex: 1; }
+.alerts-controls form.inline input { padding: 3px 6px; font-size: 12px; }
+.chip { display: inline-flex; align-items: center; border: 1px solid #d1d5db; border-radius: 999px; padding: 1px 4px 1px 10px; background: #fff; }
+.chip.chip-err { border-color: #f59e0b; background: #fff7e6; }
+.chip button { border: 0; background: none; cursor: pointer; font: inherit; padding: 0 4px; }
+.chip button.link { font-weight: 600; color: #1d4ed8; }
+.chip button.x { color: #9ca3af; font-size: 15px; }
+.warn-inline { color: #b45309; }
+.alert-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.alert-list li { display: grid; grid-template-columns: 120px 260px 1fr; gap: 8px; padding: 5px 8px; border-left: 4px solid #d1d5db; margin-bottom: 3px; background: #fafafa; border-radius: 3px; }
+.alert-list li.confirmed.buy { border-left-color: #16a34a; background: #f0fdf4; }
+.alert-list li.confirmed.sell { border-left-color: #dc2626; background: #fef2f2; }
+.alert-list li.forming { border-left-color: #f59e0b; }
+.alert-list li.faded { color: #6b7280; }
+.alert-list li.test { border-left-color: #2563eb; }
+.alert-list .when { color: #6b7280; }
+.alert-list .detail { color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) { .alert-list li { grid-template-columns: 1fr; } .alert-list .detail { white-space: normal; } }

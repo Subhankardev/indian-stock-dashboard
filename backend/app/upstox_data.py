@@ -40,6 +40,7 @@ API_BASE = "https://api.upstox.com"
 INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
 _INSTRUMENT_TTL = 12 * 3600
 _CANDLE_TTL = 15 * 60
+_TODAY_TTL = 60  # seconds; the forming daily bar
 _CHUNK_DAYS = 365  # stay well inside the per-request range limit for daily candles
 
 
@@ -164,21 +165,26 @@ class UpstoxClient:
     def daily_candles(self, instrument_key: str, start: date, end: date, include_today: bool = True) -> pd.DataFrame:
         key = quote(instrument_key, safe="")
 
-        def load():
+        def load_history():
             frames = []
             for a, b in _date_chunks(start, end):
                 body = self._get(f"/v3/historical-candle/{key}/days/1/{b:%Y-%m-%d}/{a:%Y-%m-%d}")
                 frames.append(parse_candles(body.get("data", {}).get("candles", [])))
-            if include_today and end >= date.today():
-                try:
-                    body = self._get(f"/v3/historical-candle/intraday/{key}/days/1")
-                    frames.append(parse_candles(body.get("data", {}).get("candles", [])))
-                except UpstoxError:
-                    pass  # market closed / holiday: historical data is enough
-            df = pd.concat(frames) if frames else parse_candles([])
-            return df[~df.index.duplicated(keep="last")].sort_index()
+            return pd.concat(frames) if frames else parse_candles([])
 
-        return self._cached(("candles", instrument_key, start, end), _CANDLE_TTL, load).copy()
+        def load_today():
+            try:
+                body = self._get(f"/v3/historical-candle/intraday/{key}/days/1")
+                return parse_candles(body.get("data", {}).get("candles", []))
+            except UpstoxError:
+                return parse_candles([])  # market closed / holiday: history is enough
+
+        # Completed days change rarely; today's forming bar is refreshed every minute.
+        frames = [self._cached(("candles", instrument_key, start, end), _CANDLE_TTL, load_history)]
+        if include_today and end >= date.today():
+            frames.append(self._cached(("today", instrument_key), _TODAY_TTL, load_today))
+        df = pd.concat([f for f in frames if len(f)]) if any(len(f) for f in frames) else parse_candles([])
+        return df[~df.index.duplicated(keep="last")].sort_index().copy()
 
     def expired_futures_candles(self, underlying_key: str, start: date, max_contracts: int) -> list[pd.DataFrame]:
         if not self.token:
