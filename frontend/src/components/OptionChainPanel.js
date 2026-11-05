@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 const API = "http://localhost:8000";
-const REFRESH_MS = 60_000;
+const REFRESH_MS = 30_000;
 const fmt = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v) ? "–" : Number(v).toFixed(d));
 const big = (v) => (v === null || v === undefined ? "–" : Math.round(v).toLocaleString("en-IN"));
 const signed = (v) => (!v ? "–" : `${v > 0 ? "+" : ""}${big(v)}`);
@@ -47,6 +47,13 @@ function OptionChainPanel({ symbol, demo = false }) {
   const [error, setError] = useState(null);
   const [useDemo, setUseDemo] = useState(demo);
   const [updated, setUpdated] = useState(null);
+  const [tick, setTick] = useState(0); // bumps to force a refresh
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     setExpiry("");
@@ -79,7 +86,7 @@ function OptionChainPanel({ symbol, demo = false }) {
       cancelled = true;
       clearInterval(t);
     };
-  }, [symbol, expiry, useDemo]);
+  }, [symbol, expiry, useDemo, tick]);
 
   if (error && !data) {
     return (
@@ -102,7 +109,9 @@ function OptionChainPanel({ symbol, demo = false }) {
         Option chain — {data.symbol}{" "}
         <small>
           {data.source === "synthetic" ? "(demo data)" : `via ${data.source}`}
-          {updated && ` · updated ${updated.toLocaleTimeString()}`}
+          {updated && ` · snapshot fetched ${updated.toLocaleTimeString()}`}
+          {updated && ` · next refresh in ${Math.max(0, Math.ceil((updated.getTime() + REFRESH_MS - now) / 1000))}s`}{" "}
+          <button className="small" onClick={() => setTick((n) => n + 1)}>Refresh now</button>
           {error && <span className="error"> · refresh failed: {error}</span>}
         </small>
       </h3>
@@ -174,7 +183,7 @@ function OptionChainPanel({ symbol, demo = false }) {
       </div>
       <p className="legend">
         Bars = open interest · OI chg vs previous day · tags show price/OI build-up per contract ·
-        shaded strike = in-the-money side · outlined rows = ATM / OI walls · refreshes every minute
+        shaded strike = in-the-money side · outlined rows = ATM / OI walls · snapshot from Upstox, refreshed every 30 s (not tick-by-tick)
       </p>
     </div>
   );

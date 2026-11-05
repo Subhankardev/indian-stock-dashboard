@@ -144,6 +144,10 @@ function LiveQuote({ symbol, demo, levels, demoBase }) {
             <div className={sign(live.change_pct)}>{live.change_pct > 0 ? "+" : ""}{fmt(live.change_pct)}%</div>
           </div>
           <div className="kv">
+            <span>Last trade</span>
+            <b title="Exchange timestamp of the last trade, sent by Upstox">
+              {px.ltt ? new Date(px.ltt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }) + " IST" : "–"}
+            </b>
             <span>Bid / Ask</span><b>{fmt(px.bid)} / {fmt(px.ask)}</b>
             <span>Day O/H/L</span><b>{px.day ? `${fmt(px.day.open)} / ${fmt(px.day.high)} / ${fmt(px.day.low)}` : "–"}</b>
             <span>Volume</span><b>{big(px.volume)}</b>

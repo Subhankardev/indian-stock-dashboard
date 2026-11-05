@@ -24,6 +24,7 @@ Configuration (environment variables):
 """
 from __future__ import annotations
 
+import difflib
 import gzip
 import json
 import os
@@ -63,12 +64,22 @@ def parse_candles(rows: Iterable[list]) -> pd.DataFrame:
 
 
 def find_equity(instruments: list[dict], symbol: str) -> dict:
+    """The tradable underlying for a symbol: an NSE stock, or an index such as NIFTY /
+    BANKNIFTY (resolved through its F&O contracts' ``underlying_key``)."""
     sym = symbol.upper()
     for ins in instruments:
         if ins.get("segment") == "NSE_EQ" and ins.get("instrument_type") == "EQ" \
                 and str(ins.get("trading_symbol", "")).upper() == sym:
             return ins
-    raise UpstoxError(f"{sym} not found in the Upstox NSE_EQ instrument list")
+    for ins in instruments:
+        if ins.get("segment") == "NSE_FO" and str(ins.get("underlying_symbol", "")).upper() == sym \
+                and str(ins.get("underlying_key", "")).startswith("NSE_INDEX|"):
+            return {"instrument_key": ins["underlying_key"], "trading_symbol": sym, "instrument_type": "INDEX"}
+    names = {str(i.get("trading_symbol", "")).upper() for i in instruments if i.get("segment") == "NSE_EQ"}
+    names |= {str(i.get("underlying_symbol", "")).upper() for i in instruments if i.get("segment") == "NSE_FO"}
+    close = difflib.get_close_matches(sym, sorted(n for n in names if n), n=3, cutoff=0.75)
+    hint = f" Did you mean {' or '.join(close)}?" if close else ""
+    raise UpstoxError(f"{sym} is not an NSE stock or index on Upstox.{hint}")
 
 
 def find_futures(instruments: list[dict], symbol: str) -> list[dict]:

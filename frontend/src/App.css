@@ -82,3 +82,5 @@ table.chain td.strike.itm-pe { box-shadow: inset -4px 0 0 #fde68a; }
 .tag { display: block; font-size: 10px; color: #6b7280; }
 .tag.up { color: #15803d; }
 .tag.down { color: #b91c1c; }
+
+button.small { font-size: 11px; padding: 1px 6px; margin-left: 4px; }
