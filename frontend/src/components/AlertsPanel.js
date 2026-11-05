@@ -48,6 +48,7 @@ function AlertsPanel({ currentSymbol, onSelect }) {
   const [alerts, setAlerts] = useState([]);
   const [watchlist, setWatchlist] = useState([]);
   const [scanner, setScanner] = useState(null);
+  const [telegram, setTelegram] = useState(null);
   const [error, setError] = useState(null);
   const [add, setAdd] = useState("");
   const [perm, setPerm] = useState(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
@@ -77,6 +78,7 @@ function AlertsPanel({ currentSymbol, onSelect }) {
         setError(null);
         setWatchlist(d.watchlist);
         setScanner(d.scanner);
+        setTelegram(d.telegram || null);
         if (lastId.current === null) {
           setAlerts(d.alerts); // history on first load: show, don't notify
         } else if (d.alerts.length) {
@@ -111,7 +113,10 @@ function AlertsPanel({ currentSymbol, onSelect }) {
         setTimeout(poll, 300);
         return d;
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => {
+        setError(e.message);
+        setTimeout(poll, 300); // refresh status (e.g. Telegram last error) after a failure too
+      });
 
   const watch = (sym) => sym && call("POST", `/api/alerts/watchlist/${encodeURIComponent(sym.trim().toUpperCase())}`);
   const unwatch = (sym) => call("DELETE", `/api/alerts/watchlist/${encodeURIComponent(sym)}`);
@@ -151,9 +156,28 @@ function AlertsPanel({ currentSymbol, onSelect }) {
         {perm === "granted" && <span className="muted">desktop notifications on</span>}
         <label className="muted"><input type="checkbox" checked={sound} onChange={(e) => setSound(e.target.checked)} /> sound</label>
         <button className="small" onClick={() => call("POST", "/api/alerts/test")}>Send test alert</button>
+        {telegram && telegram.configured && (
+          <button className="small" onClick={() => call("POST", "/api/alerts/telegram/test")}>Telegram test</button>
+        )}
         <button className="small" onClick={() => call("POST", "/api/alerts/scan")}>Scan now</button>
       </div>
 
+      {telegram && (
+        <p className="tg-status">
+          {telegram.configured ? (
+            <>
+              <span className={`dot ${telegram.last_error ? "off" : "on"}`} /> Telegram alerts on → chat {telegram.chat_id}
+              <span className="muted"> · {telegram.kinds.join(", ")} · sent {telegram.sent}</span>
+              {telegram.last_error && <span className="error"> · last send failed: {telegram.last_error}</span>}
+            </>
+          ) : (
+            <span className="muted">
+              Telegram alerts off. To get alerts on your phone, set <code>TELEGRAM_BOT_TOKEN</code> and{" "}
+              <code>TELEGRAM_CHAT_ID</code> on the backend (see README → Telegram alerts).
+            </span>
+          )}
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
       {errors.length > 0 && (
         <p className="warn" title={errors.map(([s, e]) => `${s}: ${e}`).join("\n\n")}>

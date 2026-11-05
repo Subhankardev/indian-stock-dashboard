@@ -47,6 +47,7 @@ class AlertStore:
     def __init__(self, path: str | os.PathLike):
         self.path = Path(path)
         self._lock = threading.Lock()
+        self.listeners: list[Callable[[dict], None]] = []
         self.data = {"watchlist": [], "alerts": [], "state": {}, "next_id": 1}
         if self.path.exists():
             try:
@@ -85,6 +86,11 @@ class AlertStore:
             self.data["next_id"] += 1
             self.data["alerts"] = (self.data["alerts"] + [alert])[-MAX_ALERTS:]
             self._save()
+        for listener in self.listeners:  # e.g. Telegram; must never break alerting
+            try:
+                listener(alert)
+            except Exception:
+                pass
         return alert
 
     def since(self, last_id: int = 0, limit: int = 50) -> list[dict]:
