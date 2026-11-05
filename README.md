@@ -43,7 +43,7 @@ uvicorn app.main:app --reload
 All settings live in `backend/.env`, which the backend reads at startup. Create it once from the template (`cp .env.example .env`) and fill in what you use:
 
 ```ini
-UPSTOX_ACCESS_TOKEN=eyJ...          # new token every morning
+UPSTOX_ACCESS_TOKEN=eyJ...          # regular token: daily; extended token: about a year
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 TELEGRAM_CHAT_ID=7844852392
 ```
@@ -155,7 +155,7 @@ Configuration (in `backend/.env`; see `backend/.env.example`):
 | Variable | Default | Meaning |
 |---|---|---|
 | `DATA_SOURCE` | `upstox` | `upstox` or `nse` (the old unofficial NSE endpoints) |
-| `UPSTOX_ACCESS_TOKEN` | *(empty)* | Optional. Candle data is public. Without a token, OI covers only the live futures contracts (about 3 months back). With a token, expired contracts are fetched through `/v2/expired-instruments/...` and OI history goes back further. Upstox tokens expire daily. |
+| `UPSTOX_ACCESS_TOKEN` | *(empty)* | Optional. Candle data is public. Without a token, OI covers only the live futures contracts (about 3 months back). With a token, expired contracts are fetched through `/v2/expired-instruments/...` and OI history goes back further. A regular Upstox token expires daily; an *extended* token lasts about a year (treat it like a password). |
 | `UPSTOX_MAX_EXPIRED` | `24` | How many expired monthly contracts to pull |
 
 Set these in `backend/.env` (see *Settings* above) and restart the backend.
