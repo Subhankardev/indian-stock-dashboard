@@ -1,6 +1,12 @@
-import pytest
+import os
 
-from app.alerts import routes as alert_routes
+# Never load the developer's real backend/.env (with live tokens) into tests.
+# Must run before any test module imports app.main.
+os.environ["APP_SKIP_DOTENV"] = "1"
+
+import pytest  # noqa: E402
+
+from app.alerts import routes as alert_routes  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

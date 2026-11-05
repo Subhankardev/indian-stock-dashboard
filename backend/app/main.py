@@ -1,3 +1,8 @@
+# Load backend/.env before anything reads its settings.
+from app.config import describe as describe_config, load_env_file
+
+load_env_file()
+
 import os
 from datetime import date
 from typing import Literal, Optional
@@ -132,3 +137,9 @@ def wave_oi_analysis(
     report = build_report(df, symbol, cfg, bt_cfg, source=source)
     report["warning"] = warning
     return report
+
+
+@app.get("/api/config")
+def config_status():
+    """Which settings the backend sees and where each came from (secrets masked)."""
+    return describe_config()
