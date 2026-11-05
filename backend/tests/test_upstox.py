@@ -172,3 +172,21 @@ def test_live_legs_picks_near_future_and_previous_day_oi():
     legs = UpstoxClient(access_token="tok", session=s).live_legs("reliance")
     assert legs["EQ"] == EQ_KEY and legs["FUT"] == "NSE_FO|111"
     assert legs["prev_oi"] == 1059  # last completed day's OI of the near-month contract
+
+
+def test_index_symbols_resolve_through_their_fo_underlying():
+    instruments = INSTRUMENTS + [
+        {"segment": "NSE_FO", "instrument_type": "FUT", "underlying_symbol": "NIFTY",
+         "underlying_key": "NSE_INDEX|Nifty 50", "instrument_key": "NSE_FO|777", "expiry": 1_900_000_000_000},
+    ]
+    nifty = find_equity(instruments, "nifty")
+    assert nifty["instrument_key"] == "NSE_INDEX|Nifty 50" and nifty["instrument_type"] == "INDEX"
+    assert [f["instrument_key"] for f in find_futures(instruments, "NIFTY")] == ["NSE_FO|777"]
+
+
+def test_unknown_symbol_suggests_close_matches():
+    with pytest.raises(UpstoxError, match="Did you mean RELIANCE"):
+        find_equity(INSTRUMENTS, "RELIENCE")
+    with pytest.raises(UpstoxError) as exc:
+        find_equity(INSTRUMENTS, "ZZZZZZ")
+    assert "Did you mean" not in str(exc.value)

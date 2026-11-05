@@ -1,12 +1,13 @@
 import os
-from typing import Literal
+from datetime import date
+from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from app import nse_data, upstox_data
 from app.nse_data import get_stock_data, get_option_chain
 from app.strategies import analyze_stock
-from app.option_analytics import analyze_option_chain
+from app.option_analytics import analyze_chain, normalise_nse_chain, synthetic_chain
 from app.wave_oi import BacktestConfig, StrategyConfig, build_report, make_synthetic
 from app.live import routes as live_routes
 
@@ -31,15 +32,39 @@ app.add_middleware(
 
 @app.get("/api/stock/{symbol}")
 def stock_analysis(symbol: str):
-    df = load_daily_prices(symbol)
-    analysis = analyze_stock(df)
-    return analysis
+    # Unhandled errors become a bare 500 without CORS headers, which browsers report as a CORS failure.
+    try:
+        df = load_daily_prices(symbol)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not fetch prices for {symbol}: {exc}")
+    return analyze_stock(df)
 
 @app.get("/api/options/{symbol}")
-def option_analysis(symbol: str):
-    chain = get_option_chain(symbol)
-    analysis = analyze_option_chain(chain)
-    return analysis
+def option_analysis(
+    symbol: str,
+    expiry: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD; default nearest"),
+    source: Literal["default", "upstox", "nse", "synthetic"] = "default",
+    window: int = Query(12, ge=0, le=100, description="Strikes either side of ATM in `rows` (0 = all)"),
+    spot: float = Query(1000.0, gt=0, description="Spot price for source=synthetic"),
+):
+    """Option chain analytics: PCR, max pain, OI walls, ATM IV / straddle, OI build-ups."""
+    if source == "default":
+        source = DATA_SOURCE
+    try:
+        if source == "synthetic":
+            chain = synthetic_chain(symbol, spot)
+        elif source == "upstox":
+            chain = upstox_data.client().option_chain(symbol, expiry)
+        else:
+            nse_expiry = date.fromisoformat(expiry).strftime("%d-%b-%Y") if expiry else None
+            chain = normalise_nse_chain(get_option_chain(symbol), symbol, nse_expiry)
+    except upstox_data.UpstoxError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not fetch {source} option chain for {symbol}: {exc}")
+    if not chain["rows"]:
+        raise HTTPException(status_code=404, detail=f"Empty option chain for {symbol} {chain.get('expiry')}")
+    return analyze_chain(chain, window=window)
 
 @app.get("/api/trending")
 def trending_stocks(limit: int = 10):

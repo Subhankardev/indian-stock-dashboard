@@ -24,11 +24,12 @@ Configuration (environment variables):
 """
 from __future__ import annotations
 
+import difflib
 import gzip
 import json
 import os
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Iterable, Optional
 from urllib.parse import quote
 
@@ -63,12 +64,22 @@ def parse_candles(rows: Iterable[list]) -> pd.DataFrame:
 
 
 def find_equity(instruments: list[dict], symbol: str) -> dict:
+    """The tradable underlying for a symbol: an NSE stock, or an index such as NIFTY /
+    BANKNIFTY (resolved through its F&O contracts' ``underlying_key``)."""
     sym = symbol.upper()
     for ins in instruments:
         if ins.get("segment") == "NSE_EQ" and ins.get("instrument_type") == "EQ" \
                 and str(ins.get("trading_symbol", "")).upper() == sym:
             return ins
-    raise UpstoxError(f"{sym} not found in the Upstox NSE_EQ instrument list")
+    for ins in instruments:
+        if ins.get("segment") == "NSE_FO" and str(ins.get("underlying_symbol", "")).upper() == sym \
+                and str(ins.get("underlying_key", "")).startswith("NSE_INDEX|"):
+            return {"instrument_key": ins["underlying_key"], "trading_symbol": sym, "instrument_type": "INDEX"}
+    names = {str(i.get("trading_symbol", "")).upper() for i in instruments if i.get("segment") == "NSE_EQ"}
+    names |= {str(i.get("underlying_symbol", "")).upper() for i in instruments if i.get("segment") == "NSE_FO"}
+    close = difflib.get_close_matches(sym, sorted(n for n in names if n), n=3, cutoff=0.75)
+    hint = f" Did you mean {' or '.join(close)}?" if close else ""
+    raise UpstoxError(f"{sym} is not an NSE stock or index on Upstox.{hint}")
 
 
 def find_futures(instruments: list[dict], symbol: str) -> list[dict]:
@@ -243,6 +254,61 @@ class UpstoxClient:
             if len(hist) and pd.notna(hist["open_interest"].iloc[-1]):
                 legs["prev_oi"] = float(hist["open_interest"].iloc[-1])
         return legs
+
+
+    # -- options ----------------------------------------------------------- #
+    def option_meta(self, symbol: str) -> tuple[str, list[str]]:
+        """(underlying instrument key, upcoming expiries as YYYY-MM-DD) from the instrument file.
+        Works for stocks (RELIANCE) and indices (NIFTY, BANKNIFTY, ...)."""
+        sym = symbol.upper()
+        opts = [i for i in self.instruments()
+                if i.get("segment") == "NSE_FO" and i.get("instrument_type") in ("CE", "PE")
+                and str(i.get("underlying_symbol", "")).upper() == sym]
+        if not opts:
+            raise UpstoxError(f"{sym} has no NSE options")
+        today = datetime.now(IST).date()
+        expiries = sorted({
+            datetime.fromtimestamp(o["expiry"] / 1000, IST).date().isoformat()
+            for o in opts if o.get("expiry")
+            and datetime.fromtimestamp(o["expiry"] / 1000, IST).date() >= today
+        })
+        key = opts[0].get("underlying_key") or find_equity(self.instruments(), sym)["instrument_key"]
+        return key, expiries
+
+    def option_chain(self, symbol: str, expiry: Optional[str] = None) -> dict:
+        """Normalised option chain (see ``option_analytics``) for one expiry (default: nearest)."""
+        if not self.token:
+            raise UpstoxError("The Upstox option chain needs UPSTOX_ACCESS_TOKEN on the backend")
+        key, expiries = self.option_meta(symbol)
+        expiry = expiry or (expiries[0] if expiries else None)
+        if expiry is None:
+            raise UpstoxError(f"No upcoming option expiries for {symbol}")
+        body = self._cached(("chain", key, expiry), 30, lambda: self._get(
+            "/v2/option/chain", {"instrument_key": key, "expiry_date": expiry}))
+        return parse_option_chain(body.get("data") or [], symbol, expiry, expiries)
+
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _opt_side(d: Optional[dict]) -> Optional[dict]:
+    if not d:
+        return None
+    md, gk = d.get("market_data") or {}, d.get("option_greeks") or {}
+    return {
+        "ltp": md.get("ltp"), "close": md.get("close_price"), "oi": md.get("oi"), "prev_oi": md.get("prev_oi"),
+        "volume": md.get("volume"), "bid": md.get("bid_price"), "ask": md.get("ask_price"),
+        "iv": gk.get("iv"), "delta": gk.get("delta"), "key": d.get("instrument_key"),
+    }
+
+
+def parse_option_chain(data: list, symbol: str, expiry: str, expiries: list[str]) -> dict:
+    """Upstox /v2/option/chain rows -> normalised chain."""
+    rows = [{"strike": float(r["strike_price"]), "CE": _opt_side(r.get("call_options")),
+             "PE": _opt_side(r.get("put_options"))} for r in data if r.get("strike_price") is not None]
+    spot = next((r.get("underlying_spot_price") for r in data if r.get("underlying_spot_price")), None)
+    return {"symbol": symbol.upper(), "expiry": expiry, "expiries": expiries, "spot": spot,
+            "source": "upstox", "rows": rows}
 
 
 _default_client: Optional[UpstoxClient] = None

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import StockTable from "./components/StockTable";
 import StockDetail from "./components/StockDetail";
 import WaveOIPanel from "./components/WaveOIPanel";
+import OptionChainPanel from "./components/OptionChainPanel";
 import './App.css';
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
         <>
           {!demo && <StockDetail symbol={selectedStock} />}
           <WaveOIPanel key={`${selectedStock}-${demo}`} symbol={selectedStock} demo={demo} />
+          <OptionChainPanel key={`oc-${selectedStock}-${demo}`} symbol={selectedStock} demo={demo} />
         </>
       )}
     </div>
