@@ -6,7 +6,7 @@ A full-stack web dashboard for real-time Indian stock market analytics, includin
 
 - **Trending Stock Screener**: See which stocks are trending with signals (BUY/SELL/HOLD).
 - **Technical Indicators**: SMA, RSI, MACD, Bollinger Bands.
-- **Buy/Sell Alerts**: watchlist scanner with forming / confirmed signal alerts and desktop notifications (see below).
+- **Buy/Sell Alerts**: watchlist scanner with forming / confirmed signal alerts, desktop notifications and Telegram (see below).
 - **Option Chain Analytics** (Upstox): PCR, max pain, OI walls, ATM IV and expected move, OI build-ups per strike (see below).
 - **Wave · GTI · OI Analysis**: Elliott wave structure, Ghost Trade Indicator and futures open interest combined into signals, with a backtest (see below).
 - **Real-Time**: Data updates every few minutes.
@@ -76,12 +76,36 @@ The 🔔 **Signal alerts** panel watches a list of symbols and tells you when th
 
 The dashboard tab must be open to receive notifications; the backend keeps scanning and records alerts either way. The watchlist and alert history are saved in `backend/.alerts.json` (gitignored), so a restart doesn't re-alert.
 
+### Telegram alerts (optional)
+
+Every alert can also go to Telegram, so it reaches your phone even when the dashboard is closed. This takes about 5 minutes to set up:
+
+1. In Telegram, message **@BotFather**, send `/newbot` and follow the prompts. It gives you a **bot token** like `123456:ABC-DEF…`.
+2. Open a chat with your new bot and send it any message, e.g. "hi".
+3. Start the backend with the token, then open `http://localhost:8000/api/alerts/telegram/chats`. It lists your `chat_id`:
+   ```bash
+   export TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+   ```
+4. Restart the backend with both variables set. Then click **Telegram test** in the dashboard, or `POST /api/alerts/telegram/test`:
+   ```bash
+   export TELEGRAM_CHAT_ID=your_chat_id
+   ```
+
+Optional: `TELEGRAM_ALERT_KINDS=confirmed` sends only confirmed signals. The default is `forming,confirmed,faded,test`.
+
+- Messages are sent from a background thread, so a slow or unreachable Telegram never delays scanning.
+- If Telegram rate-limits a message, it is retried once.
+- A failure shows up in the alerts panel, and the alert is still recorded and shown in the dashboard.
+- The bot token never leaves the backend: the API shows it masked and removes it from error messages.
+
 **API:**
 - `GET /api/alerts?since=<id>`
 - `PUT /api/alerts/watchlist` with body `{"symbols": [...]}`
 - `POST` or `DELETE /api/alerts/watchlist/{symbol}`
 - `POST /api/alerts/scan`
 - `POST /api/alerts/test`
+- `GET /api/alerts/telegram/chats`
+- `POST /api/alerts/telegram/test`
 
 **Environment variables:** `ALERTS_FILE`, `ALERTS_ENABLED` (`0` turns the scanner off), `ALERTS_INTERVAL` (seconds while the market is open; default 60).
 

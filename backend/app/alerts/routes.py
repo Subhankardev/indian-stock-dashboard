@@ -6,9 +6,12 @@
 * ``DELETE /api/alerts/watchlist/{symbol}``  remove one symbol
 * ``POST   /api/alerts/scan``                scan now
 * ``POST   /api/alerts/test``                emit a test alert (to check notifications)
+* ``GET    /api/alerts/telegram/chats``      chats that messaged your bot (to find TELEGRAM_CHAT_ID)
+* ``POST   /api/alerts/telegram/test``       send a test message to Telegram now
 
 Configuration: ``ALERTS_FILE`` (default ``backend/.alerts.json``), ``ALERTS_ENABLED``
 (default 1), ``ALERTS_INTERVAL`` seconds while the market is open (default 60).
+Telegram: see ``telegram.py`` (``TELEGRAM_BOT_TOKEN``, ``TELEGRAM_CHAT_ID``, ``TELEGRAM_ALERT_KINDS``).
 """
 from __future__ import annotations
 
@@ -23,10 +26,12 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from .engine import AlertScanner, AlertStore
+from .telegram import TelegramNotifier
 
 router = APIRouter()
 DEFAULT_FILE = Path(__file__).resolve().parents[2] / ".alerts.json"
 _scanner: Optional[AlertScanner] = None
+_telegram: Optional[TelegramNotifier] = None
 
 
 def _default_loader(symbol: str):
@@ -35,19 +40,29 @@ def _default_loader(symbol: str):
     return provider.get_price_oi_history(symbol, 730)
 
 
+def get_telegram() -> TelegramNotifier:
+    global _telegram
+    if _telegram is None:
+        _telegram = TelegramNotifier.from_env()
+    return _telegram
+
+
 def get_scanner() -> AlertScanner:
     global _scanner
     if _scanner is None:
         store = AlertStore(os.getenv("ALERTS_FILE") or DEFAULT_FILE)
+        store.listeners.append(get_telegram())
         _scanner = AlertScanner(store, _default_loader,
                                 open_interval=float(os.getenv("ALERTS_INTERVAL", "60")))
     return _scanner
 
 
-def reset_scanner(scanner: Optional[AlertScanner] = None) -> None:
-    """For tests: swap in a scanner (or drop the cached one)."""
-    global _scanner
-    _scanner = scanner
+def reset_scanner(scanner: Optional[AlertScanner] = None, telegram: Optional[TelegramNotifier] = None) -> None:
+    """For tests: swap in a scanner / Telegram notifier (or drop the cached ones)."""
+    global _scanner, _telegram
+    _scanner, _telegram = scanner, telegram
+    if scanner is not None and telegram is not None:
+        scanner.store.listeners.append(telegram)
 
 
 @asynccontextmanager
@@ -75,6 +90,7 @@ def _payload(scanner: AlertScanner, since: int, limit: int) -> dict:
         "last_id": scanner.store.data["next_id"] - 1,
         "watchlist": scanner.store.watchlist,
         "scanner": scanner.status,
+        "telegram": get_telegram().info(),
     }
 
 
@@ -117,3 +133,28 @@ def test_alert():
         "stop": None, "target": None, "wave": None,
         "reason": "Test alert - if you can see this as a notification, alerts are working.",
     })
+
+
+@router.get("/api/alerts/telegram/chats")
+def telegram_chats():
+    try:
+        chats = get_telegram().find_chats()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400 if "Set TELEGRAM" in str(exc) else 502, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not reach Telegram: {type(exc).__name__}")
+    hint = ("Send any message to your bot in Telegram, then reload this." if not chats
+            else "Set TELEGRAM_CHAT_ID to the chat_id you want alerts in, then restart the backend.")
+    return {"chats": chats, "hint": hint}
+
+
+@router.post("/api/alerts/telegram/test")
+def telegram_test():
+    tg = get_telegram()
+    if not tg.configured:
+        raise HTTPException(status_code=400, detail="Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID on the backend")
+    try:
+        tg.send_now({"kind": "test", "side": "BUY", "symbol": "TEST"})
+    except Exception:
+        raise HTTPException(status_code=502, detail=tg.status["last_error"] or "Telegram send failed")
+    return tg.info()

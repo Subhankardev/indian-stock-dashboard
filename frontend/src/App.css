@@ -105,3 +105,6 @@ button.small { font-size: 11px; padding: 1px 6px; margin-left: 4px; }
 .alert-list .when { color: #6b7280; }
 .alert-list .detail { color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) { .alert-list li { grid-template-columns: 1fr; } .alert-list .detail { white-space: normal; } }
+
+.tg-status { font-size: 12.5px; margin: 0 0 8px; }
+.tg-status code { background: #f3f4f6; padding: 0 4px; border-radius: 3px; }
