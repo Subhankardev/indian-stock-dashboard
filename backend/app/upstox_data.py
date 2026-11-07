@@ -123,6 +123,7 @@ class UpstoxClient:
         self.token = clean_token(raw)
         self.session = session or requests.Session()
         self._cache: dict = {}
+        self._last_call = 0.0
 
     # -- plumbing -------------------------------------------------------- #
     def _headers(self) -> dict:
@@ -134,12 +135,26 @@ class UpstoxClient:
             h["Authorization"] = f"Bearer {self.token}"
         return h
 
+    def _pace(self) -> None:
+        """Keep real API calls under Upstox's rate limits (about 8 per second by default)."""
+        if not isinstance(self.session, requests.Session):
+            return  # test doubles aren't throttled
+        gap = float(os.getenv("UPSTOX_MIN_INTERVAL", "0.12"))
+        wait = self._last_call + gap - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        self._last_call = time.monotonic()
+
     def _get(self, path: str, params: Optional[dict] = None) -> dict:
+        self._pace()
         resp = self.session.get(f"{API_BASE}{path}", headers=self._headers(), params=params, timeout=20)
         if resp.status_code == 401:
             raise UpstoxError("Upstox rejected the access token (expired? tokens last one trading day)")
-        if resp.status_code == 429:
-            time.sleep(1.0)
+        for backoff in (1.0, 2.0, 4.0):  # rate limited: back off and retry
+            if resp.status_code != 429:
+                break
+            time.sleep(backoff)
+            self._pace()
             resp = self.session.get(f"{API_BASE}{path}", headers=self._headers(), params=params, timeout=20)
         if not resp.ok:
             raise UpstoxError(f"Upstox {path} -> HTTP {resp.status_code}: {resp.text[:200]}")
