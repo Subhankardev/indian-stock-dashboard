@@ -326,6 +326,12 @@ def parse_option_chain(data: list, symbol: str, expiry: str, expiries: list[str]
 _default_client: Optional[UpstoxClient] = None
 
 
+def reset_client() -> None:
+    """Forget the cached client so the next call picks up a new access token."""
+    global _default_client
+    _default_client = None
+
+
 def client() -> UpstoxClient:
     global _default_client
     if _default_client is None:

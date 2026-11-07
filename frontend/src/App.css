@@ -317,3 +317,20 @@ table.chain td.strike.itm-pe { box-shadow: inset -4px 0 0 #fde68a; }
   .panel { padding: 14px; }
   .symbol-head h1 { font-size: 22px; }
 }
+
+/* ------------------------------------------------------------------ upstox banner */
+.pill.warn { background: #fef3c7; color: #b45309; }
+.banner {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  max-width: 1440px; margin: 16px auto 0; padding: 12px 16px; border-radius: var(--radius);
+  font-size: 13px; line-height: 1.5; width: calc(100% - 48px);
+}
+.banner > div { flex: 1; min-width: 260px; }
+.warn-banner { background: var(--amber-soft); border: 1px solid #fcd34d; color: #78350f; }
+.bad-banner { background: var(--down-soft); border: 1px solid #fca5a5; color: #7f1d1d; }
+a.primary-link {
+  background: var(--primary); color: #fff; text-decoration: none; font-weight: 600;
+  padding: 8px 14px; border-radius: var(--radius-sm); white-space: nowrap;
+}
+a.primary-link:hover { filter: brightness(1.08); }
+@media (max-width: 640px) { .banner { width: calc(100% - 32px); } }

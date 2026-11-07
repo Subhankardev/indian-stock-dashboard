@@ -25,6 +25,10 @@ SETTINGS: dict[str, tuple[bool, str]] = {
     "DATA_SOURCE": (False, "upstox (default) or nse"),
     "UPSTOX_ACCESS_TOKEN": (True, "Upstox token: live feed, option chain, longer OI history (expires daily)"),
     "UPSTOX_MAX_EXPIRED": (False, "expired futures contracts to pull for OI history (default 24)"),
+    "UPSTOX_API_KEY": (False, "API key of your Upstox app - enables the 'Log in with Upstox' button"),
+    "UPSTOX_API_SECRET": (True, "API secret of your Upstox app"),
+    "UPSTOX_REDIRECT_URI": (False, "redirect URL registered in your Upstox app "
+                                   "(default http://localhost:8000/api/upstox/callback)"),
     "TELEGRAM_BOT_TOKEN": (True, "Telegram bot token from @BotFather"),
     "TELEGRAM_CHAT_ID": (False, "Telegram chat to send alerts to"),
     "TELEGRAM_ALERT_KINDS": (False, "alert kinds sent to Telegram (default forming,confirmed,faded,test)"),
@@ -38,7 +42,8 @@ _loaded_from: Optional[Path] = None
 _cleaned: dict[str, int] = {}
 
 # Values that must be a single unbroken token: copy/paste junk is stripped from these.
-TOKEN_SETTINGS = ("UPSTOX_ACCESS_TOKEN", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
+TOKEN_SETTINGS = ("UPSTOX_ACCESS_TOKEN", "UPSTOX_API_KEY", "UPSTOX_API_SECRET",
+                  "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
 _QUOTES = "\"'\u2018\u2019\u201c\u201d`"
 
 
@@ -133,3 +138,21 @@ def describe() -> dict:
         }
     return {"env_file": str(_loaded_from or ENV_FILE), "env_file_found": (_loaded_from or ENV_FILE).is_file(),
             "settings": out}
+
+
+def set_env_value(key: str, value: str, path: Optional[Path | str] = None) -> None:
+    """Write KEY=value into the .env file (replacing an existing line, keeping the rest)
+    and into this process's environment."""
+    path = Path(path) if path is not None else Path(ENV_FILE)  # looked up now, so tests can redirect it
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    line = f"{key}={value}"
+    pattern = re.compile(rf"(?m)^\s*(?:export\s+)?{re.escape(key)}\s*=.*$")
+    if pattern.search(text):
+        text = pattern.sub(lambda m: line, text, count=1)
+    else:
+        text = (text.rstrip("\n") + "\n" if text else "") + line + "\n"
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+    os.environ[key] = value
+    _sources[key] = ".env"
