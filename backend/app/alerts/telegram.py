@@ -61,6 +61,17 @@ def format_message(alert: dict) -> str:
             lines.append(f"Stop ₹{_fmt(alert['stop'])} · Target ₹{_fmt(alert['target'])}")
         if alert.get("reason"):
             lines.append(f"<i>{e(alert['reason'])}</i>")
+        opt = alert.get("option")
+        if opt:
+            exp = opt.get("expiry") or ""
+            line = (f"📈 <b>Option: buy {e(str(opt['strike']).rstrip('0').rstrip('.'))} {e(opt['type'])}</b>"
+                    f" ({e(exp)}) @ ₹{_fmt(opt.get('premium'))} → target ₹{_fmt(opt.get('target_premium'))}"
+                    f" · stop ₹{_fmt(opt.get('stop_premium'))}")
+            if opt.get("lot_size"):
+                line += f"\nLot {opt['lot_size']} = ₹{_fmt(opt.get('cost_per_lot'), 0)} · max loss ₹{_fmt(opt.get('max_loss_per_lot'), 0)}"
+            lines.append(line)
+            for w in opt.get("warnings", [])[:2]:
+                lines.append(f"⚠️ {e(w)}")
     if alert.get("bar_date"):
         lines.append(f"Bar {e(str(alert['bar_date']))}")
     return "\n".join(lines)

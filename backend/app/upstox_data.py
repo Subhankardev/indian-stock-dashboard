@@ -310,7 +310,8 @@ def _opt_side(d: Optional[dict]) -> Optional[dict]:
     return {
         "ltp": md.get("ltp"), "close": md.get("close_price"), "oi": md.get("oi"), "prev_oi": md.get("prev_oi"),
         "volume": md.get("volume"), "bid": md.get("bid_price"), "ask": md.get("ask_price"),
-        "iv": gk.get("iv"), "delta": gk.get("delta"), "key": d.get("instrument_key"),
+        "iv": gk.get("iv"), "delta": gk.get("delta"), "gamma": gk.get("gamma"), "theta": gk.get("theta"),
+        "key": d.get("instrument_key"),
     }
 
 
@@ -324,6 +325,13 @@ def parse_option_chain(data: list, symbol: str, expiry: str, expiries: list[str]
 
 
 _default_client: Optional[UpstoxClient] = None
+
+
+def instrument_by_key(key: str) -> Optional[dict]:
+    """Instrument-file record for an instrument key (lot size, trading symbol, ...)."""
+    c = client()
+    index = c._cached("by_key", 12 * 3600, lambda: {i.get("instrument_key"): i for i in c.instruments()})
+    return index.get(key)
 
 
 def reset_client() -> None:

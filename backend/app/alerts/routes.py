@@ -42,6 +42,17 @@ def _default_loader(symbol: str):
     return provider.get_price_oi_history(symbol, 730)
 
 
+def _default_option_suggester(symbol: str, side: str, target: float, stop: float) -> dict:
+    """Option idea from the live Upstox chain (needs the day's token); errors mean 'no idea'."""
+    from app import options_suggest
+    from app.config import clean_token
+    if os.getenv("DATA_SOURCE", "upstox").lower() != "upstox":
+        raise RuntimeError("option ideas need the Upstox data source")
+    if not clean_token(os.getenv("UPSTOX_ACCESS_TOKEN")):
+        raise RuntimeError("option ideas need the day's Upstox token")
+    return options_suggest.suggest_for_symbol(symbol, side, target, stop, source="upstox")
+
+
 def get_telegram() -> TelegramNotifier:
     global _telegram
     if _telegram is None:
@@ -57,7 +68,8 @@ def get_scanner() -> AlertScanner:
         from app.wave_oi.tuning import load_rules, split_params
         strategy, _ = split_params(load_rules()["params"])  # same rules as the dashboard
         _scanner = AlertScanner(store, _default_loader, config=strategy,
-                                open_interval=float(os.getenv("ALERTS_INTERVAL", "60")))
+                                open_interval=float(os.getenv("ALERTS_INTERVAL", "60")),
+                                option_suggester=_default_option_suggester)
     return _scanner
 
 

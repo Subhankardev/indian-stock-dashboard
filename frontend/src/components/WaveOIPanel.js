@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import LiveQuote from "./LiveQuote";
+import OptionIdea, { optionContext } from "./OptionIdea";
 
 const API = "http://localhost:8000";
 const fmt = (v, d = 2) => (v === null || v === undefined ? "–" : Number(v).toFixed(d));
@@ -192,6 +193,8 @@ function WaveOIPanel({ symbol, demo = false }) {
           )}
         </div>
       </div>
+
+      <OptionIdea symbol={data.symbol} demo={data.source === "synthetic"} spot={latest.close} ctx={optionContext(data)} />
 
       <Chart data={data} />
       <p className="legend">
