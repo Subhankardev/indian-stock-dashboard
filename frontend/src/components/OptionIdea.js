@@ -13,7 +13,12 @@ export function optionContext(data) {
   }
   const w = latest.wave;
   if (["W3", "W5"].includes(w.label) && w.target && w.stop && w.direction) {
-    return { side: w.direction === 1 ? "BUY" : "SELL", target: w.target, stop: w.stop, why: `the active ${w.label} setup` };
+    const up = w.direction === 1;
+    const price = latest.close;
+    if ((up && price >= w.target) || (!up && price <= w.target)) {
+      return { note: `Price ${price.toFixed(2)} has already reached the ${w.label} target ${w.target.toFixed(2)} - no new entry. Wait for a fresh setup.` };
+    }
+    return { side: up ? "BUY" : "SELL", target: w.target, stop: w.stop, why: `the active ${w.label} setup` };
   }
   return null;
 }
@@ -24,7 +29,7 @@ function OptionIdea({ symbol, demo, spot, ctx }) {
   const ctxKey = ctx ? `${ctx.side}|${ctx.target}|${ctx.stop}` : "";
 
   useEffect(() => {
-    if (!ctx) return;
+    if (!ctx || ctx.note) return;
     setIdea(null);
     setError(null);
     const qs = new URLSearchParams({ side: ctx.side, target: ctx.target, stop: ctx.stop });
@@ -40,12 +45,20 @@ function OptionIdea({ symbol, demo, spot, ctx }) {
   }, [symbol, demo, spot, ctxKey]);
 
   if (!ctx) return null;
+  if (ctx.note) {
+    return (
+      <div className="option-idea muted-idea">
+        <h4 className="opt-head">Option idea <span className="muted">for an option buyer</span></h4>
+        <p className="small-text">{ctx.note}</p>
+      </div>
+    );
+  }
   const head = (
     <h4 className="opt-head">
       Option idea <span className="muted">for an option buyer, from {ctx.why}</span>
     </h4>
   );
-  if (error) return <div className="option-idea">{head}<p className="muted small-text">No option idea: {error}</p></div>;
+  if (error) return <div className="option-idea muted-idea">{head}<p className="small-text">No option idea: {error}</p></div>;
   if (!idea) return <div className="option-idea">{head}<p className="muted small-text">Loading option chain…</p></div>;
 
   const [main, ...alts] = idea.ideas;

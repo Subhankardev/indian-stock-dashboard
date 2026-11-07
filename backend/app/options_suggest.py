@@ -113,6 +113,23 @@ def _years(today: date, expiry: str, extra_trading_days: int = 0) -> float:
 # --------------------------------------------------------------------------- #
 # The suggestion
 # --------------------------------------------------------------------------- #
+class NoTrade(ValueError):
+    """The levels don't allow a sensible new entry (e.g. target already reached)."""
+
+
+def check_levels(side: str, spot: float, target: float, stop: float, min_move: float = 0.005) -> None:
+    """Refuse an idea whose target is already reached (or nearly), or whose stop is already hit."""
+    up = side.upper() == "BUY"
+    if (up and spot >= target) or (not up and spot <= target):
+        raise NoTrade(f"Price {spot:,.2f} has already reached the target {target:,.2f} - no new entry. "
+                      "Wait for a fresh setup.")
+    if (up and spot <= stop) or (not up and spot >= stop):
+        raise NoTrade(f"Price {spot:,.2f} is already beyond the stop {stop:,.2f} - the setup is no longer valid.")
+    if abs(target - spot) / spot < min_move:
+        raise NoTrade(f"Only {abs(target - spot) / spot:.1%} left to the target {target:,.2f} - "
+                      "too little room for an option buyer.")
+
+
 def suggest(
     chain: dict,
     side: str,
@@ -130,6 +147,7 @@ def suggest(
         raise ValueError("side must be BUY or SELL")
     kind = "CE" if side == "BUY" else "PE"
     spot = float(chain["spot"])
+    check_levels(side, spot, target, stop)
     expiry = chain["expiry"]
     if not _is_date(expiry):
         raise ValueError(f"Unknown expiry {expiry!r}")
