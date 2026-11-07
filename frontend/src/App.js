@@ -9,35 +9,73 @@ import './App.css';
 const API = "http://localhost:8000";
 const QUICK_PICKS = ["NIFTY", "BANKNIFTY", "RELIANCE", "HDFCBANK", "INFY", "TCS"];
 
-/** Top-bar pills: is each data source / channel configured, and is the market open? */
-function StatusPills() {
+const UPSTOX_LABEL = {
+  ok: ["ok", "Upstox connected"],
+  limited: ["warn", "Upstox: limited token"],
+  expired: ["bad", "Upstox token expired"],
+  invalid: ["bad", "Upstox token invalid"],
+  missing: ["off", "Upstox: no token"],
+  unknown: ["off", "Upstox: unchecked"],
+};
+
+const loginUrl = `${API}/api/upstox/login`;
+
+/** Top-bar pills (Upstox token health, Telegram, market) + a banner when Upstox needs a login. */
+function useStatus() {
   const [cfg, setCfg] = useState(null);
+  const [upstox, setUpstox] = useState(null);
   const [phase, setPhase] = useState(null);
 
-  useEffect(() => {
-    const load = () => {
-      fetch(`${API}/api/config`).then((r) => r.json()).then(setCfg).catch(() => setCfg(false));
-      fetch(`${API}/api/alerts?limit=1`).then((r) => r.json())
-        .then((d) => setPhase(d.scanner && d.scanner.phase)).catch(() => {});
-    };
-    load();
-    const t = setInterval(load, 60_000);
-    return () => clearInterval(t);
+  const load = useCallback((refresh = false) => {
+    fetch(`${API}/api/config`).then((r) => r.json()).then(setCfg).catch(() => setCfg(false));
+    fetch(`${API}/api/upstox/status${refresh ? "?refresh=true" : ""}`).then((r) => r.json()).then(setUpstox).catch(() => {});
+    fetch(`${API}/api/alerts?limit=1`).then((r) => r.json())
+      .then((d) => setPhase(d.scanner && d.scanner.phase)).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    load();
+    const t = setInterval(() => load(), 60_000);
+    const onFocus = () => load(true); // e.g. back from the Upstox login tab
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(t); window.removeEventListener("focus", onFocus); };
+  }, [load]);
+  return { cfg, upstox, phase };
+}
+
+function StatusPills({ cfg, upstox, phase }) {
   if (cfg === false) return <div className="pills"><span className="pill bad">Backend offline</span></div>;
   if (!cfg || !cfg.settings) return null;
   const s = cfg.settings;
-  const problem = (k) => s[k] && s[k].problem;
-  const upstox = problem("UPSTOX_ACCESS_TOKEN") ? "bad" : s.UPSTOX_ACCESS_TOKEN.set ? "ok" : "off";
   const telegram = s.TELEGRAM_BOT_TOKEN.set && s.TELEGRAM_CHAT_ID.set ? "ok" : "off";
+  const [cls, label] = upstox ? UPSTOX_LABEL[upstox.state] || ["off", "Upstox"] : ["off", "Upstox: checking…"];
+  const until = upstox && upstox.state === "ok" && upstox.expires_at
+    ? ` · valid until ${new Date(upstox.expires_at).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "";
   return (
     <div className="pills">
-      <span className={`pill ${upstox}`} title={problem("UPSTOX_ACCESS_TOKEN") || "Upstox access token (backend/.env)"}>
-        Upstox {upstox === "ok" ? "connected" : upstox === "bad" ? "token invalid" : "no token"}
-      </span>
+      <span className={`pill ${cls}`} title={(upstox && upstox.message) + until}>{label}</span>
       <span className={`pill ${telegram}`} title="Telegram alerts (backend/.env)">Telegram {telegram === "ok" ? "on" : "off"}</span>
       {phase && <span className={`pill ${phase === "open" ? "ok" : "off"}`}>Market {phase}</span>}
+    </div>
+  );
+}
+
+function UpstoxBanner({ upstox }) {
+  if (!upstox || ["ok", "unknown"].includes(upstox.state)) return null;
+  return (
+    <div className={`banner ${upstox.state === "limited" ? "warn-banner" : "bad-banner"}`}>
+      <div>
+        <b>{UPSTOX_LABEL[upstox.state][1]}.</b> {upstox.message}
+        {upstox.state !== "missing" && " Daily prices still load; the live feed, option chain and longer OI history need a working token."}
+      </div>
+      {upstox.login_available ? (
+        <a className="primary-link" href={loginUrl} target="_blank" rel="noreferrer">Log in with Upstox</a>
+      ) : (
+        <span className="small-text">
+          To enable one-click login, add <code>UPSTOX_API_KEY</code> and <code>UPSTOX_API_SECRET</code> to backend/.env
+          and register <code>{upstox.redirect_uri}</code> as your Upstox app's redirect URL.
+        </span>
+      )}
     </div>
   );
 }
@@ -58,6 +96,7 @@ function Welcome({ onPick }) {
 }
 
 function App() {
+  const status = useStatus();
   const [trending, setTrending] = useState([]);
   const [selectedStock, setSelectedStock] = useState(null);
   const [query, setQuery] = useState("");
@@ -92,8 +131,9 @@ function App() {
             <input type="checkbox" checked={demo} onChange={(e) => setDemo(e.target.checked)} /> Demo data
           </label>
         </form>
-        <StatusPills />
+        <StatusPills {...status} />
       </header>
+      <UpstoxBanner upstox={status.upstox} />
 
       <main className="layout">
         <section className="content">

@@ -88,6 +88,18 @@ class LiveHub:
             if not self.viewers:
                 await self._stop_feed()
 
+    async def restart_feed(self) -> None:
+        """Reconnect upstream (e.g. with a new access token), keeping every viewer
+        and subscription. No-op when nobody is watching."""
+        async with self._lock:
+            if not self.viewers:
+                return
+            await self._stop_feed()
+            self.feed = self._factory(self._on_message)
+            self._task = asyncio.create_task(self.feed.run())
+            if self.refs:
+                await self.feed.subscribe(list(self.refs))
+
     async def _stop_feed(self) -> None:
         if self.feed is not None:
             self.feed.stop()

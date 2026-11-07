@@ -55,6 +55,24 @@ TELEGRAM_CHAT_ID=7844852392
 - The tests never read `.env`, so your real tokens are never used during `pytest`.
 - Long tokens copied from a chat or web page often carry invisible characters (zero-width spaces, soft hyphens) or stray quotes. The backend strips these automatically, and `/api/config` notes when it did.
 
+### Upstox login and token health
+
+The market-data APIs (live feed, option chain, expired-futures OI) need Upstox's **daily access token**, which expires around 03:30 IST every night. An *extended token* doesn't work for these: Upstox only accepts it for read-only account data (positions, holdings, orders).
+
+**One-click daily login (recommended):**
+1. In the Upstox developer console, open your app (or create one). Set its **redirect URL** to exactly `http://localhost:8000/api/upstox/callback`.
+2. Put the app's **API key** and **secret** in `backend/.env` as `UPSTOX_API_KEY=...` and `UPSTOX_API_SECRET=...`, then restart the backend.
+3. Each morning, click **Log in with Upstox** in the dashboard and sign in on Upstox's page. The backend exchanges the one-time code for the day's token, saves it to `backend/.env` and switches to it immediately: no restart, and open live feeds reconnect with the new token.
+
+**Token health:** `GET /api/upstox/status` makes one real market-data call to check the token. The top bar and a banner show the result:
+- **connected**, with the expiry time on hover
+- **limited token**: an extended token
+- **token expired**
+- **token invalid**, e.g. copied with masking dots `•••`
+- **no token**
+
+The check is cached for 5 minutes and re-runs when you come back to the dashboard tab.
+
 ### Frontend
 
 ```bash

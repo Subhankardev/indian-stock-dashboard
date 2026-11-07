@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 
 from app.live import routes as live_routes
 from app.alerts import routes as alert_routes
+from app import upstox_auth
 
 
 @asynccontextmanager
@@ -29,6 +30,7 @@ async def lifespan(app):
 app = FastAPI(title="Indian Stock Market Analytics API", lifespan=lifespan)
 app.include_router(live_routes.router)
 app.include_router(alert_routes.router)
+app.include_router(upstox_auth.router)
 
 # "upstox" (default) or "nse": where price / OI history comes from.
 DATA_SOURCE = os.getenv("DATA_SOURCE", "upstox").lower()
