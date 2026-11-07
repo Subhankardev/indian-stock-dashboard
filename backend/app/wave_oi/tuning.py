@@ -45,7 +45,7 @@ PARAM_GRID: dict[str, list] = {
     "trade_corrections": [False, True],
     "exit_on_gti_flip": [True, False],
 }
-BACKTEST_KEYS = {"exit_on_gti_flip"}
+BACKTEST_KEYS = {"exit_on_gti_flip", "exit_mode"}
 DEFAULTS = {**{k: getattr(StrategyConfig(), k) for k in PARAM_GRID if k not in BACKTEST_KEYS},
             "exit_on_gti_flip": BacktestConfig().exit_on_gti_flip}
 

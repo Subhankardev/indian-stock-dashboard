@@ -38,6 +38,7 @@ def dated(df: pd.DataFrame, last_day: datetime) -> pd.DataFrame:
 class Rig:
     def __init__(self, tmp_path):
         self.store = AlertStore(tmp_path / "a.json")
+        self.store.set_paused(False)
         self.store.set_watchlist(["ABC"])
         self.df = None
         self.clock = None
@@ -100,6 +101,7 @@ def test_holiday_bar_from_previous_day_is_not_forming(tmp_path, frames):
 def test_one_failing_symbol_does_not_stop_the_scan(tmp_path, frames):
     with_sig, _, _ = frames
     store = AlertStore(tmp_path / "a.json")
+    store.set_paused(False)
     store.set_watchlist(["BAD", "GOOD"])
 
     def load(sym):
@@ -135,6 +137,7 @@ def test_corrupt_store_file_starts_fresh(tmp_path):
 def test_alerts_api(tmp_path, frames):
     with_sig, _, _ = frames
     store = AlertStore(tmp_path / "api.json")
+    store.set_paused(False)
     alert_routes.reset_scanner(AlertScanner(store, lambda s: (dated(with_sig, WED), None),
                                             now=lambda: at(WED, 20)))
     c = TestClient(app)
@@ -159,6 +162,7 @@ def test_background_scanner_runs_with_the_app(tmp_path, monkeypatch, frames):
     with_sig, _, _ = frames
     monkeypatch.setenv("ALERTS_ENABLED", "1")
     store = AlertStore(tmp_path / "bg.json")
+    store.set_paused(False)
     store.set_watchlist(["ABC"])
     alert_routes.reset_scanner(AlertScanner(store, lambda s: (dated(with_sig, WED), None),
                                             now=lambda: at(WED, 20)))
@@ -188,3 +192,26 @@ def test_dismiss_and_clear_alerts(tmp_path):
     assert c.delete("/api/alerts", params={"kind": "all"}).json() == {"removed": 1}
     assert AlertStore(tmp_path / "c.json").since(0) == [], "removal is persisted"
     assert c.post("/api/alerts/test").json()["id"] == 5, "ids keep counting up after a clear"
+
+
+
+def test_alerts_are_paused_by_default_and_can_resume(tmp_path, frames):
+    with_sig, _, _ = frames
+    store = AlertStore(tmp_path / "p.json")
+    assert store.paused is True, "paused unless the user opts back in"
+    store.set_watchlist(["ABC"])
+    calls = []
+
+    def load(sym):
+        calls.append(sym)
+        return dated(with_sig, WED), None
+
+    sc = AlertScanner(store, load, now=lambda: at(WED, 20))
+    assert sc.scan_all() == [] and calls == [] and sc.status["paused"] is True, "no data fetched while paused"
+    alert_routes.reset_scanner(sc)
+    c = TestClient(app)
+    assert c.get("/api/alerts").json()["paused"] is True
+    assert c.post("/api/alerts/resume").json() == {"paused": False}
+    assert AlertStore(tmp_path / "p.json").paused is False, "resume is saved"
+    assert [a["kind"] for a in sc.scan_all()] == ["confirmed"]
+    assert c.post("/api/alerts/pause").json() == {"paused": True} and sc.scan_all() == []

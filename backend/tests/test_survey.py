@@ -61,9 +61,12 @@ def test_survey_pooling_and_variants():
     assert t["trades"] == sum(r["trades"] for r in res["per_symbol"].values())
     assert t["signals"] == sum(r["buy_signals"] + r["sell_signals"] for r in res["per_symbol"].values())
     assert list(res["variants"]) == list(survey.VARIANTS)
-    # dropping filters can only allow more signals, never fewer
+    # a filter can only remove signals, never add them
     v = res["variants"]
-    assert v["Wave + GTI (no OI filter)"]["signals"] >= v["Wave + GTI + OI (active rules)"]["signals"]
+    assert v["B. Long only"]["sell_signals"] == 0
+    assert v["C. Long only + 200-day trend"]["signals"] <= v["B. Long only"]["signals"] <= v["A. Current rules (long & short)"]["signals"]
+    for x in v.values():
+        assert x["first_half_trades"] + x["second_half_trades"] == x["trades"]
 
 
 def test_verdicts():
@@ -78,9 +81,9 @@ def test_cli_writes_report(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(survey, "BACKEND", tmp_path)
     assert survey.main(["--source", "synthetic"]) == 0
     out = capsys.readouterr().out
-    assert "Signals generated" in out and "Win rate" in out
+    assert "Signals generated" in out and "win rate" in out and "Passes?" in out
     report = next((tmp_path / "reports").glob("survey-*.md")).read_text()
-    assert "## By stock" in report and "## Which part helps?" in report
+    assert "## By stock" in report and "## Rule variants" in report and "Passes?" in report
 
 
 # -------------------------------------------------------- Upstox pacing -- #
@@ -125,3 +128,37 @@ def test_rate_limit_backs_off_and_retries(monkeypatch):
     s = FakeSession([429, 429, 429, 429])
     with pytest.raises(upstox_data.UpstoxError, match="429"):
         upstox_data.UpstoxClient(access_token="t", session=s)._get("/x")
+
+
+
+def test_pass_rule():
+    good = {"trades": 120, "avg_r_ci": (0.05, 0.4), "first_half_avg_r": 0.2, "second_half_avg_r": 0.1}
+    assert survey.passes(good)
+    assert not survey.passes({**good, "trades": 30})
+    assert not survey.passes({**good, "avg_r_ci": (-0.01, 0.4)})
+    assert not survey.passes({**good, "second_half_avg_r": -0.05}), "must hold in both halves"
+
+
+def test_corporate_action_suspects_are_excluded():
+    import pandas as pd
+    df = make_synthetic(300, seed=2)
+    split = df.copy()
+    split.loc[split.index[150]:, ["open", "high", "low", "close"]] *= 0.4  # unadjusted 60% "drop"
+    found = survey.corporate_action_suspects({"OK": df, "TMPV": split})
+    assert list(found) == ["TMPV"] and "unadjusted" in found["TMPV"]
+
+
+def test_trailing_exit_and_trend_filter():
+    from app.wave_oi import analyze, run_backtest
+    from app.wave_oi.tuning import split_params
+    df = make_synthetic(600, seed=7)
+    s, b = split_params({**DEFAULTS, "allow_short": False, "trend_filter_ma": 200, "exit_mode": "trail"})
+    an, _ = analyze(df, s)
+    ma = df["close"].rolling(200).mean()
+    longs = an.index[an["signal"] == 1]
+    assert (an["signal"] >= 0).all() and all(df.loc[d, "close"] > ma.loc[d] for d in longs)
+    assert an["signal"].iloc[:199].eq(0).all(), "no trades while the 200-day average warms up"
+    trades = run_backtest(an, b)["trades"]
+    assert all(t["exit_reason"] != "target" for t in trades), "no fixed target in trail mode"
+    for t in trades:  # the trailed stop only ever moves in the trade's favour
+        assert t["exit_stop"] >= t["stop"]

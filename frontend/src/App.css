@@ -358,3 +358,8 @@ table.opt-alts th { background: transparent; }
 
 .option-idea.muted-idea { background: var(--surface-2); border-color: var(--border); }
 .option-idea.muted-idea p { color: var(--text-2); margin: 0 0 10px; }
+
+/* ------------------------------------------------------------------ paused / experimental */
+.paused-box { background: var(--amber-soft); border: 1px solid #fcd34d; color: #78350f; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; margin: 6px 0 2px; }
+.paused-actions { margin-top: 8px; }
+.exp-tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: none; background: #fef3c7; color: #92400e; border-radius: 999px; padding: 1px 7px; margin-left: 4px; vertical-align: middle; }

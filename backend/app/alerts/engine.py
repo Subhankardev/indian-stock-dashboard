@@ -61,6 +61,18 @@ class AlertStore:
         tmp.write_text(json.dumps(self.data, indent=1, default=str))
         os.replace(tmp, self.path)
 
+    # -- pause --------------------------------------------------------------- #
+    @property
+    def paused(self) -> bool:
+        """Alerts are paused unless explicitly resumed: the strategy lost money in testing
+        (NIFTY 50 survey, Nov 2026), so nothing is sent until the user opts back in."""
+        return bool(self.data.get("paused", True))
+
+    def set_paused(self, paused: bool) -> None:
+        with self._lock:
+            self.data["paused"] = bool(paused)
+            self._save()
+
     # -- watchlist ----------------------------------------------------------- #
     @property
     def watchlist(self) -> list[str]:
@@ -206,6 +218,11 @@ class AlertScanner:
         return out
 
     def scan_all(self) -> list[dict]:
+        if self.store.paused:  # no Upstox calls, no alerts, no Telegram
+            now = self.now()
+            self.status.update(last_run=None, phase=market_phase(now), errors={}, paused=True)
+            return []
+        self.status["paused"] = False
         out, errors = [], {}
         for symbol in self.store.watchlist:
             try:

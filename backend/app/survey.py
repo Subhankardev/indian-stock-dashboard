@@ -3,8 +3,8 @@ many signals they generate and how often they win.
 
 Run from the backend folder (virtualenv active, logged in to Upstox today):
 
-    python -m app.survey                     # NIFTY 50, ~2 years
-    python -m app.survey --days 1095         # ~3 years
+    python -m app.survey                     # NIFTY 50, ~3 years
+    python -m app.survey --days 730          # ~2 years
     python -m app.survey --symbols RELIANCE,TCS,INFY
 
 For each stock: signals generated (BUY / SELL), trades taken (one position
@@ -48,11 +48,15 @@ NIFTY50_FALLBACK = [
 ]
 
 VARIANTS = {
-    "Wave + GTI + OI (active rules)": {},
-    "Wave + GTI (no OI filter)": {"use_oi": False},
-    "GTI + OI (no wave setup)": {"use_wave": False},
-    "GTI trend only": {"use_wave": False, "use_oi": False},
+    "A. Current rules (long & short)": {},
+    "B. Long only": {"allow_short": False},
+    "C. Long only + 200-day trend": {"allow_short": False, "trend_filter_ma": 200},
+    "D. Long + 200-day trend + trailing exit": {"allow_short": False, "trend_filter_ma": 200, "exit_mode": "trail"},
+    "E. Plain trend-following (no wave/OI): long + 200-day + trailing": {
+        "use_wave": False, "use_oi": False, "allow_short": False, "trend_filter_ma": 200, "exit_mode": "trail"},
+    "F. GTI trend only (long & short)": {"use_wave": False, "use_oi": False},
 }
+MAX_DAILY_MOVE = 0.35  # a bigger one-day move is almost always an unadjusted split/demerger
 
 
 # --------------------------------------------------------------------------- #
@@ -114,6 +118,7 @@ def run_symbol(df: pd.DataFrame, params: dict) -> dict:
     an, _ = analyze(df, scfg)
     trades = run_backtest(an, bcfg)["trades"]
     rs = [net_r(t) for t in trades]
+    dates = [pd.Timestamp(t["entry_date"]) for t in trades]
     wins = sum(r > 0 for r in rs)
     losses = [r for r in rs if r <= 0]
     years = max((df.index[-1] - df.index[0]).days / 365.25, 1e-9)
@@ -129,7 +134,8 @@ def run_symbol(df: pd.DataFrame, params: dict) -> dict:
         "profit_factor": (sum(r for r in rs if r > 0) / -sum(losses)) if losses and sum(losses) < 0 else None,
         "best_r": max(rs) if rs else None, "worst_r": min(rs) if rs else None,
         "buy_hold_pct": float(df["close"].iloc[-1] / df["close"].iloc[0] - 1) * 100,
-        "rs": rs,
+        "rs": rs, "dates": dates,
+        "mid": df.index[0] + (df.index[-1] - df.index[0]) / 2,
     }
 
 
@@ -152,7 +158,36 @@ def pooled(rows: list[dict]) -> dict:
         "stocks_positive": sum(1 for r in rows if r["total_r"] > 0),
         "stocks_no_trades": sum(1 for r in rows if r["trades"] == 0),
         "median_buy_hold_pct": float(np.median([r["buy_hold_pct"] for r in rows])) if rows else None,
+        **_halves(rows),
     }
+
+
+def _halves(rows: list[dict]) -> dict:
+    """Average R in the first vs second half of each stock's period - a real edge should show in both."""
+    first = [r for row in rows for r, d in zip(row["rs"], row["dates"]) if d < row["mid"]]
+    second = [r for row in rows for r, d in zip(row["rs"], row["dates"]) if d >= row["mid"]]
+    return {"first_half_trades": len(first), "second_half_trades": len(second),
+            "first_half_avg_r": float(np.mean(first)) if first else None,
+            "second_half_avg_r": float(np.mean(second)) if second else None}
+
+
+def passes(v: dict, min_trades: int = 50) -> bool:
+    """Pass = enough trades, average R's 95% range above zero, and positive in BOTH halves."""
+    lo, _ = v["avg_r_ci"]
+    return (v["trades"] >= min_trades and lo is not None and lo > 0
+            and (v["first_half_avg_r"] or 0) > 0 and (v["second_half_avg_r"] or 0) > 0)
+
+
+def corporate_action_suspects(dfs: dict[str, pd.DataFrame]) -> dict[str, str]:
+    """Stocks whose history has a one-day move over 35% - nearly always an unadjusted split/demerger."""
+    out = {}
+    for s, df in dfs.items():
+        ret = df["close"].pct_change().abs()
+        if len(ret.dropna()) and ret.max() > MAX_DAILY_MOVE:
+            day = ret.idxmax()
+            out[s] = (f"excluded: {ret.max():.0%} one-day move on {day:%Y-%m-%d} "
+                      "(likely an unadjusted split/demerger)")
+    return out
 
 
 def survey(dfs: dict[str, pd.DataFrame], params: dict) -> dict:
@@ -213,18 +248,29 @@ def render(result: dict, universe_note: str, rules: dict, skipped: dict) -> str:
         "",
         f"**Verdict:** {verdict(t)}",
         "",
-        "## Which part helps? (same stocks, same period)",
+        "## Rule variants (same stocks, same period)",
         "",
-        "| Rules | Signals | Trades | Win rate | Avg R | 95% range of avg R | Total R | Profit factor |",
-        "|---|---|---|---|---|---|---|---|",
+        "A rule set **passes** only with 50+ trades, a 95% range for average R entirely above 0, "
+        "and a positive average R in **both** halves of the period.",
+        "",
+        "| Rules | Signals | Trades | Win rate | Avg R | 95% range | 1st half avg R | 2nd half avg R | Total R | Passes? |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for name, v in result["variants"].items():
         a, b = v["avg_r_ci"]
         lines.append(f"| {name} | {v['signals']} | {v['trades']} | {_p(v['win_rate'])} | {_n(v['avg_r'])} | "
-                     f"{_n(a)} to {_n(b)} | {_n(v['total_r'], 1)} | {_n(v['profit_factor'])} |")
+                     f"{_n(a)} to {_n(b)} | {_n(v['first_half_avg_r'])} | {_n(v['second_half_avg_r'])} | "
+                     f"{_n(v['total_r'], 1)} | {'✅ yes' if passes(v) else '❌ no'} |")
+    winners = [n for n, v in result["variants"].items() if passes(v)]
     lines += [
         "",
-        "## By stock",
+        "**Result:** " + (
+            f"{', '.join(winners)} passed. Before trading it, confirm with `python -m app.tune` "
+            "(walk-forward) and paper-trade it first." if winners else
+            "no rule set passed - none of these versions shows a reliable edge on this data. "
+            "Keep the alerts paused."),
+        "",
+        "## By stock (rule set A: current rules)",
         "",
         "| Stock | Period | BUY sig. | SELL sig. | Signals/yr | Trades | Wins | Win rate | Avg R | Total R | Best R | Worst R | Buy & hold |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
@@ -258,7 +304,8 @@ def render(result: dict, universe_note: str, rules: dict, skipped: dict) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--symbols", help="comma-separated symbols (default: the NIFTY 50)")
-    ap.add_argument("--days", type=int, default=730, help="calendar days of history (default ~2 years)")
+    ap.add_argument("--days", type=int, default=1095,
+                    help="calendar days of history (default ~3 years, so the 200-day average has time to warm up)")
     ap.add_argument("--max-expired", type=int, default=12,
                     help="expired monthly futures to fetch per stock for OI history (default 12)")
     ap.add_argument("--source", choices=["upstox", "synthetic"], default="upstox", help=argparse.SUPPRESS)
@@ -282,6 +329,11 @@ def main(argv=None) -> int:
     dfs = load_data(symbols, args.days, args.source)
     skipped = {s: "no data (see message above)" for s in symbols if s not in dfs}
     dfs = {s: d for s, d in dfs.items() if len(d) >= 120}
+    suspects = corporate_action_suspects(dfs)
+    for sym, why in suspects.items():
+        print(f"  {sym}: {why}")
+        dfs.pop(sym)
+    skipped.update(suspects)
     if not dfs:
         print("No usable data - is the backend logged in to Upstox today?")
         return 1
@@ -295,9 +347,14 @@ def main(argv=None) -> int:
     print(f"Average per trade: {_n(t['avg_r'])}R   total {_n(t['total_r'], 1)}R   "
           f"stocks in profit {t['stocks_positive']}/{t['stocks']}")
     print(f"\nVerdict: {verdict(t)}\n")
-    print(f"{'Rules':<34}{'Signals':>8}{'Trades':>8}{'Win rate':>10}{'Avg R':>8}")
+    print(f"{'Rules':<66}{'Trades':>7}{'Win':>6}{'Avg R':>7}{'1st half':>9}{'2nd half':>9}  Passes?")
     for name, v in result["variants"].items():
-        print(f"{name:<34}{v['signals']:>8}{v['trades']:>8}{_p(v['win_rate']):>10}{_n(v['avg_r']):>8}")
+        print(f"{name:<66}{v['trades']:>7}{_p(v['win_rate']):>6}{_n(v['avg_r']):>7}"
+              f"{_n(v['first_half_avg_r']):>9}{_n(v['second_half_avg_r']):>9}  {'YES' if passes(v) else 'no'}")
+    winners = [n for n, v in result["variants"].items() if passes(v)]
+    print("\n" + (f"Passed: {', '.join(winners)}" if winners else
+                  "No rule set passed (needs 50+ trades, 95% range above 0, positive in both halves). "
+                  "Keep alerts paused."))
 
     reports = BACKEND / "reports"
     reports.mkdir(exist_ok=True)

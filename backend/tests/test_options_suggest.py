@@ -131,12 +131,14 @@ def test_alerts_carry_option_ideas(tmp_path):
                 "warnings": ["w1", "w2", "w3", "w4"]}
 
     store = AlertStore(tmp_path / "a.json")
+    store.set_paused(False)
     store.set_watchlist(["ABC"])
     alert = AlertScanner(store, lambda s: (df, None), now=lambda: at(WED, 20), option_suggester=suggester).scan_all()[0]
     assert alert["kind"] == "confirmed" and alert["option"]["strike"] == 100.0
     assert alert["option"]["warnings"] == ["w1", "w2", "w3"] and calls == [("ABC", alert["side"])]
 
     store2 = AlertStore(tmp_path / "b.json")
+    store2.set_paused(False)
     store2.set_watchlist(["ABC"])
     boom = AlertScanner(store2, lambda s: (df, None), now=lambda: at(WED, 20),
                         option_suggester=lambda *a: 1 / 0).scan_all()[0]

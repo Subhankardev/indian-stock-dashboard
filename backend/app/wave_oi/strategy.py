@@ -43,6 +43,7 @@ class StrategyConfig:
     allow_short: bool = True
     trade_corrections: bool = False
     min_rr: float = 1.5
+    trend_filter_ma: int = 0  # >0: BUY only above / SELL only below this simple moving average (e.g. 200)
     stop_mode: str = "pivot"  # "pivot": beyond the wave 2/4 low; "invalidation": full-count level
     long_oi_regimes: tuple = ("new_longs",)
     short_oi_regimes: tuple = ("new_shorts",)
@@ -110,6 +111,9 @@ def analyze(df: pd.DataFrame, cfg: StrategyConfig | None = None) -> tuple[pd.Dat
         else:
             oi_cond = pd.Series(True, index=out.index)
         cond = wave_cond & (out["gti_dir"] == sign) & oi_cond & (rr >= cfg.min_rr)
+        if cfg.trend_filter_ma:
+            ma = close.rolling(cfg.trend_filter_ma).mean()  # NaN during warm-up -> no trades
+            cond = cond & ((close > ma) if sign == 1 else (close < ma))
         return cond.fillna(False), stop, target
 
     long_cond, long_stop, long_target = side(1)

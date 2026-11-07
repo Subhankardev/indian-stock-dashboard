@@ -104,6 +104,7 @@ function AlertsPanel({ currentSymbol, onSelect }) {
   const [watchlist, setWatchlist] = useState([]);
   const [scanner, setScanner] = useState(null);
   const [telegram, setTelegram] = useState(null);
+  const [paused, setPaused] = useState(false);
   const [error, setError] = useState(null);
   const [add, setAdd] = useState("");
   const [tab, setTab] = useState("signals");
@@ -139,6 +140,7 @@ function AlertsPanel({ currentSymbol, onSelect }) {
         setWatchlist(d.watchlist);
         setScanner(d.scanner);
         setTelegram(d.telegram || null);
+        setPaused(!!d.paused);
         const fresh = d.alerts.filter((a) => a.id > (lastId.current ?? 0));
         setAlerts((prev) => merge(prev, d.alerts));
         if (lastId.current !== null && fresh.length) notify(fresh); // no notifications for history
@@ -196,9 +198,23 @@ function AlertsPanel({ currentSymbol, onSelect }) {
     <div className="panel alerts-panel">
       <div className="panel-head">
         <h3>🔔 Signal alerts</h3>
-        {scanner && <span className={`pill ${scanner.phase === "open" ? "ok" : "off"}`}>{scanner.phase === "open" ? "Live · every 1 min" : "Market closed"}</span>}
+        {paused ? <span className="pill warn">Paused</span>
+          : scanner && <span className={`pill ${scanner.phase === "open" ? "ok" : "off"}`}>{scanner.phase === "open" ? "Live · every 1 min" : "Market closed"}</span>}
       </div>
-      {lastRun && <div className="muted small-text">Last scan {lastRun}{errors.length ? "" : " · all OK"}</div>}
+      {paused ? (
+        <div className="paused-box">
+          <b>⏸ Alerts are paused.</b> In testing on the NIFTY 50 (Nov 2024 – Nov 2026) the signal rules lost
+          money - about −0.17R per trade with a 30% win rate - so no alerts or Telegram messages are sent.
+          <div className="paused-actions">
+            <button className="ghost" onClick={() => call("POST", "/api/alerts/resume")}>Resume anyway</button>
+          </div>
+        </div>
+      ) : (
+        <div className="muted small-text">
+          {lastRun ? `Last scan ${lastRun}${errors.length ? "" : " · all OK"}` : "Alerts on · first scan pending"} ·{" "}
+          <button className="link-btn" onClick={() => call("POST", "/api/alerts/pause")}>pause alerts</button>
+        </div>
+      )}
 
       <div className="section-label">Watchlist</div>
       <div className="watchlist">
