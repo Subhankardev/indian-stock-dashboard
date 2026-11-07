@@ -244,6 +244,29 @@ Upstox wss://api.upstox.com/v3/feed/market-data-feed   (protobuf, one connection
 
 Messages sent to the browser: `hello`, `tick` (`{symbol, leg: "EQ"|"FUT", tick, live}`), `feed_status`, `market_status`, `error`. See `app/live/routes.py`.
 
+### NIFTY 50 signal survey
+
+`python -m app.survey` (run in `backend/` with the virtualenv active and Upstox logged in) backtests the active rules on **every NIFTY 50 stock**. The list comes from NSE's official index file, with a built-in fallback. It reports:
+
+- **for each stock:**
+  - BUY and SELL **signals generated**
+  - signals per year
+  - **trades taken** (one position at a time)
+  - wins and **win rate**
+  - average and total R
+  - best and worst trade
+  - buy & hold over the same period
+- **all stocks pooled:** the win rate with its **95% confidence range**, the average R with its 95% range, how many stocks were profitable, and a plain-language verdict (positive edge / no clear edge / negative edge)
+- **which part helps:** the same pooled numbers for wave + GTI + OI, wave + GTI without OI, GTI + OI without waves, and GTI trend alone
+
+```bash
+python -m app.survey                      # NIFTY 50, ~2 years
+python -m app.survey --days 1095          # ~3 years
+python -m app.survey --symbols RELIANCE,TCS,INFY
+```
+
+The first run makes many Upstox requests, so the client paces itself (about 8 per second, backing off when rate-limited) and fetches the last 12 expired futures per stock for OI history. Expect a few minutes; data is cached for the day. The report goes to `backend/reports/survey-<date>.md`, with a CSV of every stock.
+
 ### Tuning the rules (walk-forward)
 
 `python -m app.tune` (run in `backend/` with the virtualenv active) tests 720 rule combinations on a basket of 10 liquid F&O symbols, using real Upstox history (about 3 years). It takes about 90 seconds.
