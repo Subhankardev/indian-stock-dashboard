@@ -7,3 +7,6 @@ __pycache__/
 .env
 .alerts.json
 .alerts.tmp
+backend/.cache/
+backend/reports/
+backend/strategy.json

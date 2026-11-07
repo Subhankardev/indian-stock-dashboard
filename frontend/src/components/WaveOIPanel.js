@@ -199,7 +199,19 @@ function WaveOIPanel({ symbol, demo = false }) {
         · ● pivots · 1–5 completed impulses · ▲▼ signals · dashed = current target / stop
       </p>
 
-      <h4>Backtest (same rules, next-bar entry, {data.bars} bars)</h4>
+      <h4>
+        Backtest (same rules, next-bar entry, {data.bars} bars){" "}
+        {data.rules && (
+          <span
+            className={`rules-tag ${data.rules.source === "tuned" ? "tuned" : ""}`}
+            title={Object.entries(data.rules.params || {}).map(([k, v]) => `${k} = ${v}`).join("\n")}
+          >
+            {data.rules.source === "tuned"
+              ? `tuned rules · ${new Date(data.rules.tuned_at).toLocaleDateString([], { day: "numeric", month: "short" })}`
+              : "default rules"}
+          </span>
+        )}
+      </h4>
       <table className="metrics">
         <tbody>
           <tr>
