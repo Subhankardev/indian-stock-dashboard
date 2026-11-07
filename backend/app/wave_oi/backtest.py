@@ -23,6 +23,7 @@ class BacktestConfig:
     fee_bps: float = 5.0          # per side, covers brokerage + slippage
     max_leverage: float = 1.0
     exit_on_gti_flip: bool = True
+    exit_mode: str = "target"     # "target": fixed target; "trail": no target, stop trails the GTI line
 
 
 @dataclass
@@ -36,6 +37,7 @@ class _Position:
     risk_per_unit: float
     fee_in: float
     exit_next_open: bool = False
+    initial_stop: float = 0.0
 
 
 def run_backtest(an: pd.DataFrame, cfg: Optional[BacktestConfig] = None) -> dict:
@@ -48,6 +50,9 @@ def run_backtest(an: pd.DataFrame, cfg: Optional[BacktestConfig] = None) -> dict
     stops = an["stop"].to_numpy(float)
     targets = an["target"].to_numpy(float)
     flips = an["gti_flip"].to_numpy(int)
+    gti_line = an["gti_line"].to_numpy(float)
+    gti_dir = an["gti_dir"].to_numpy(int)
+    trail = cfg.exit_mode == "trail"
     idx = an.index
     n = len(an)
     fee = cfg.fee_bps / 10_000.0
@@ -70,7 +75,8 @@ def run_backtest(an: pd.DataFrame, cfg: Optional[BacktestConfig] = None) -> dict
             "exit_date": str(idx[t]),
             "entry": pos.entry,
             "exit": price,
-            "stop": pos.stop,
+            "stop": pos.initial_stop,          # the stop the trade was sized on (R uses this)
+            "exit_stop": pos.stop,             # where the (possibly trailed) stop ended
             "target": pos.target,
             "qty": pos.qty,
             "pnl": pnl,
@@ -88,21 +94,28 @@ def run_backtest(an: pd.DataFrame, cfg: Optional[BacktestConfig] = None) -> dict
             if risk_per_unit > 0 and side * (target - entry) > 0 and equity > 0:
                 qty = equity * cfg.risk_per_trade / risk_per_unit
                 qty = min(qty, equity * cfg.max_leverage / entry)
-                pos = _Position(side, t, entry, stop, target, qty, risk_per_unit, qty * entry * fee)
+                pos = _Position(side, t, entry, stop, target, qty, risk_per_unit, qty * entry * fee,
+                                initial_stop=stop)
         pending = None
+
+        if pos is not None and trail and t > pos.entry_bar and gti_dir[t - 1] == pos.side:
+            # ratchet the stop to yesterday's GTI line - never loosen it
+            line = gti_line[t - 1]
+            if line == line:  # not NaN
+                pos.stop = max(pos.stop, line) if pos.side == 1 else min(pos.stop, line)
 
         if pos is not None:
             if pos.exit_next_open:
                 close_pos(t, o[t], "gti_flip")
             elif pos.side == 1:
                 if lo[t] <= pos.stop:
-                    close_pos(t, min(o[t], pos.stop), "stop")
-                elif h[t] >= pos.target:
+                    close_pos(t, min(o[t], pos.stop), "trailing_stop" if pos.stop != pos.initial_stop else "stop")
+                elif not trail and h[t] >= pos.target:
                     close_pos(t, max(o[t], pos.target), "target")
             else:
                 if h[t] >= pos.stop:
-                    close_pos(t, max(o[t], pos.stop), "stop")
-                elif lo[t] <= pos.target:
+                    close_pos(t, max(o[t], pos.stop), "trailing_stop" if pos.stop != pos.initial_stop else "stop")
+                elif not trail and lo[t] <= pos.target:
                     close_pos(t, min(o[t], pos.target), "target")
             if pos is not None and cfg.exit_on_gti_flip and flips[t] == -pos.side:
                 pos.exit_next_open = True

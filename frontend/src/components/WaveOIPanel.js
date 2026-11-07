@@ -183,7 +183,7 @@ function WaveOIPanel({ symbol, demo = false }) {
             ` · ${latest.oi.divergence > 0 ? "bullish" : "bearish"} OI divergence`}</p>
         </div>
         <div className="card">
-          <h4>Signal</h4>
+          <h4>Signal <span className="exp-tag" title="The signal rules lost money when tested on the NIFTY 50 (Nov 2024 – Nov 2026)">experimental</span></h4>
           <div className={`big ${latest.signal_today === "BUY" ? "up" : latest.signal_today === "SELL" ? "down" : ""}`}>
             {latest.signal_today === "NONE" ? "No new signal" : latest.signal_today}
           </div>

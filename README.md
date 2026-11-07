@@ -97,6 +97,9 @@ npm start
 
 ## Buy/Sell alerts
 
+> **Paused by default.** On 2 years of NIFTY 50 history (Nov 2024 – Nov 2026, 308 trades) the signal rules lost money: about **−0.17R per trade** with a **30% win rate** (95% range of average R: −0.30 to −0.04). So the scanner sends nothing until you click **Resume anyway** in the alerts panel (or `POST /api/alerts/resume`). The signal and option-idea cards are labelled *experimental*. Run `python -m app.survey` to re-test; only resume for a rule set that **passes** there.
+
+
 The 🔔 **Signal alerts** panel watches a list of symbols and tells you when the Wave · GTI · OI rules fire a BUY or SELL. Code: `backend/app/alerts/`.
 
 **How it works:**
@@ -257,11 +260,19 @@ Messages sent to the browser: `hello`, `tick` (`{symbol, leg: "EQ"|"FUT", tick, 
   - best and worst trade
   - buy & hold over the same period
 - **all stocks pooled:** the win rate with its **95% confidence range**, the average R with its 95% range, how many stocks were profitable, and a plain-language verdict (positive edge / no clear edge / negative edge)
-- **which part helps:** the same pooled numbers for wave + GTI + OI, wave + GTI without OI, GTI + OI without waves, and GTI trend alone
+- **rule variants:** the same pooled numbers for six rule sets:
+  - A: the current rules
+  - B: long only
+  - C: long only + 200-day trend filter
+  - D: C + trailing exit (no fixed target; the stop trails the GTI line)
+  - E: plain trend-following without waves or OI (long, 200-day trend, trailing exit)
+  - F: the GTI trend alone
+- **pass/fail:** a rule set **passes** only with 50+ trades, a 95% range for average R entirely above zero, and a positive average R in **both halves** of the period
+- **exclusions:** stocks with a one-day move over 35% (an unadjusted split or demerger, e.g. TMPV) are left out
 
 ```bash
-python -m app.survey                      # NIFTY 50, ~2 years
-python -m app.survey --days 1095          # ~3 years
+python -m app.survey                      # NIFTY 50, ~3 years
+python -m app.survey --days 730           # ~2 years
 python -m app.survey --symbols RELIANCE,TCS,INFY
 ```
 

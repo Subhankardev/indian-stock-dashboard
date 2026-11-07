@@ -6,6 +6,7 @@
 * ``DELETE /api/alerts/watchlist/{symbol}``  remove one symbol
 * ``POST   /api/alerts/scan``                scan now
 * ``POST   /api/alerts/test``                emit a test alert (to check notifications)
+* ``POST   /api/alerts/pause`` / ``resume``  stop / restart scanning (paused by default)
 * ``DELETE /api/alerts?kind=test|all``       clear test alerts / the whole history
 * ``DELETE /api/alerts/{id}``                dismiss one alert
 * ``GET    /api/alerts/telegram/chats``      chats that messaged your bot (to find TELEGRAM_CHAT_ID)
@@ -107,6 +108,7 @@ def _payload(scanner: AlertScanner, since: int, limit: int) -> dict:
         "watchlist": scanner.store.watchlist,
         "scanner": scanner.status,
         "telegram": get_telegram().info(),
+        "paused": scanner.store.paused,
     }
 
 
@@ -126,6 +128,18 @@ def dismiss_alert(alert_id: int):
     if not removed:
         raise HTTPException(status_code=404, detail="No such alert")
     return {"removed": removed}
+
+
+@router.post("/api/alerts/pause")
+def pause_alerts():
+    get_scanner().store.set_paused(True)
+    return {"paused": True}
+
+
+@router.post("/api/alerts/resume")
+def resume_alerts():
+    get_scanner().store.set_paused(False)
+    return {"paused": False}
 
 
 @router.put("/api/alerts/watchlist")

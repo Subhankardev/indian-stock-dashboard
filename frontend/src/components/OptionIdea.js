@@ -55,7 +55,8 @@ function OptionIdea({ symbol, demo, spot, ctx }) {
   }
   const head = (
     <h4 className="opt-head">
-      Option idea <span className="muted">for an option buyer, from {ctx.why}</span>
+      Option idea <span className="muted">for an option buyer, from {ctx.why}</span>{" "}
+      <span className="exp-tag" title="The signal rules lost money when tested on the NIFTY 50 (Nov 2024 – Nov 2026)">experimental · not profitable in testing</span>
     </h4>
   );
   if (error) return <div className="option-idea muted-idea">{head}<p className="small-text">No option idea: {error}</p></div>;
