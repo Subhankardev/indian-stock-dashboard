@@ -150,3 +150,30 @@ def test_telegram_includes_option_line():
                                      "target_premium": 468.1, "stop_premium": 140.2, "lot_size": 75,
                                      "cost_per_lot": 16672.5, "max_loss_per_lot": 6157.5, "warnings": ["Wall <x>"]}})
     assert "Option: buy 25000 CE" in msg and "Lot 75" in msg and "Wall &lt;x&gt;" in msg
+
+
+# ------------------------------------------------- no trade when levels are stale -- #
+@pytest.mark.parametrize("side,spot,target,stop,msg", [
+    ("BUY", 752.90, 750.81, 634.15, "already reached the target"),   # the DLF case
+    ("SELL", 95.0, 96.0, 103.0, "already reached the target"),
+    ("BUY", 100.0, 106.0, 101.0, "beyond the stop"),
+    ("SELL", 100.0, 94.0, 99.0, "beyond the stop"),
+    ("BUY", 100.0, 100.3, 97.0, "too little room"),
+])
+def test_no_idea_when_levels_are_stale(side, spot, target, stop, msg):
+    with pytest.raises(os_.NoTrade, match=msg):
+        os_.suggest(chain(spot=spot), side, target=target, stop=stop, today=TODAY)
+
+
+def test_endpoint_explains_no_trade():
+    r = TestClient(app).get("/api/options/DLF/suggest", params={
+        "side": "BUY", "target": 750.81, "stop": 634.15, "source": "synthetic", "spot": 752.90})
+    assert r.status_code == 422 and "already reached the target 750.81" in r.json()["detail"]
+
+
+def test_alert_skips_option_when_target_already_reached(tmp_path):
+    from app.alerts.engine import AlertScanner, AlertStore
+    sc = AlertScanner(AlertStore(tmp_path / "x.json"), lambda s: (None, None),
+                      option_suggester=lambda sym, side, t, st: os_.suggest(
+                          chain(spot=752.9), side, target=t, stop=st, today=TODAY))
+    assert sc._option_idea("DLF", "BUY", 750.81, 634.15) is None

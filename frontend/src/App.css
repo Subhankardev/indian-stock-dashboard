@@ -355,3 +355,6 @@ table.opt-alts th { background: transparent; }
 .alert-option { margin-top: 6px; font-size: 12px; color: var(--text-2); background: var(--primary-soft); border-radius: 6px; padding: 4px 8px; }
 .opt-warn { color: var(--amber); font-weight: 700; }
 @media (max-width: 760px) { .opt-main { grid-template-columns: 1fr; } }
+
+.option-idea.muted-idea { background: var(--surface-2); border-color: var(--border); }
+.option-idea.muted-idea p { color: var(--text-2); margin: 0 0 10px; }
