@@ -61,3 +61,45 @@ def test_config_endpoint_never_leaks_secrets(clean):
     assert "SECRETPART" not in str(body)
     assert body["settings"]["UPSTOX_ACCESS_TOKEN"]["set"] is True
     assert body["settings"]["UPSTOX_ACCESS_TOKEN"]["source"] == "shell"
+
+
+# --------------------------------------------------------- token cleaning -- #
+REAL = "eyJ0eXAi.eyJzdWIi.UV-vFHLs_kUw"
+
+
+@pytest.mark.parametrize("pasted", [
+    REAL,
+    "​".join(REAL[i:i + 5] for i in range(0, len(REAL), 5)),  # zero-width spaces from a chat app
+    "­".join([REAL[:10], REAL[10:]]),                         # soft hyphen
+    f"'{REAL}",                                                     # unbalanced quote
+    f"‘{REAL}’",                                          # curly quotes
+    f"  {REAL[:12]}\n{REAL[12:]}  ",                                # wrapped onto two lines
+    "﻿" + REAL,                                                # BOM
+])
+def test_clean_token_removes_copy_paste_junk(pasted):
+    assert config.clean_token(pasted) == REAL
+
+
+def test_clean_token_empty_and_problem_detection():
+    assert config.clean_token("  '' ") is None and config.clean_token(None) is None
+    assert config.token_problem(REAL) is None
+    assert "U+00E9" in config.token_problem("tokén")
+
+
+def test_tokens_from_env_file_are_cleaned_and_reported(tmp_path, clean):
+    import os
+    dirty = "​".join(REAL[i:i + 4] for i in range(0, len(REAL), 4))
+    p = tmp_path / ".env"
+    p.write_text(f"UPSTOX_ACCESS_TOKEN='{dirty}\nTELEGRAM_CHAT_ID= 7844852392 \n", encoding="utf-8")
+    clean.setattr(config, "_cleaned", {})
+    config.load_settings(p)
+    assert os.environ["UPSTOX_ACCESS_TOKEN"] == REAL and os.environ["TELEGRAM_CHAT_ID"] == "7844852392"
+    s = config.describe()["settings"]["UPSTOX_ACCESS_TOKEN"]
+    assert "fixed automatically" in s["note"] and "problem" not in s
+
+
+def test_upstox_client_cleans_token_and_refuses_non_ascii():
+    from app.upstox_data import UpstoxClient, UpstoxError
+    assert UpstoxClient(access_token="​" + REAL + "​").token == REAL
+    with pytest.raises(UpstoxError, match="non-ASCII"):
+        UpstoxClient(access_token="tokén")._headers()

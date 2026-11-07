@@ -23,6 +23,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 
 from app import upstox_data
+from app.config import clean_token
 
 from .feeds import MockFeed, UpstoxFeed
 from .hub import LiveHub
@@ -34,7 +35,7 @@ _hubs: dict[str, LiveHub] = {}
 
 
 def _token():
-    return os.getenv("UPSTOX_ACCESS_TOKEN") or None
+    return clean_token(os.getenv("UPSTOX_ACCESS_TOKEN"))
 
 
 def get_hub(source: str) -> LiveHub:

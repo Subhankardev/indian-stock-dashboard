@@ -36,6 +36,8 @@ from urllib.parse import quote
 import pandas as pd
 import requests
 
+from app.config import clean_token, token_problem
+
 API_BASE = "https://api.upstox.com"
 INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
 _INSTRUMENT_TTL = 12 * 3600
@@ -117,13 +119,17 @@ def _date_chunks(start: date, end: date, chunk: int = _CHUNK_DAYS):
 # --------------------------------------------------------------------------- #
 class UpstoxClient:
     def __init__(self, access_token: Optional[str] = None, session: Optional[requests.Session] = None):
-        self.token = access_token if access_token is not None else os.getenv("UPSTOX_ACCESS_TOKEN") or None
+        raw = access_token if access_token is not None else os.getenv("UPSTOX_ACCESS_TOKEN")
+        self.token = clean_token(raw)
         self.session = session or requests.Session()
         self._cache: dict = {}
 
     # -- plumbing -------------------------------------------------------- #
     def _headers(self) -> dict:
         h = {"Accept": "application/json"}
+        problem = token_problem(self.token)
+        if problem:
+            raise UpstoxError(f"UPSTOX_ACCESS_TOKEN {problem}")
         if self.token:
             h["Authorization"] = f"Bearer {self.token}"
         return h

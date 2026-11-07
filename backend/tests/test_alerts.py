@@ -171,3 +171,20 @@ def test_background_scanner_runs_with_the_app(tmp_path, monkeypatch, frames):
         body = c.get("/api/alerts").json()
     assert [a["kind"] for a in body["alerts"]] == ["confirmed"]
     assert body["scanner"]["next_run"]
+
+
+def test_dismiss_and_clear_alerts(tmp_path):
+    store = AlertStore(tmp_path / "c.json")
+    alert_routes.reset_scanner(AlertScanner(store, lambda s: (None, None)))
+    c = TestClient(app)
+    for _ in range(3):
+        c.post("/api/alerts/test")
+    store.emit({"symbol": "X", "kind": "confirmed", "side": "BUY", "bar_date": "2026-11-04"})
+    assert c.delete("/api/alerts/2").json() == {"removed": 1}
+    assert c.delete("/api/alerts/2").status_code == 404
+    assert c.delete("/api/alerts", params={"kind": "test"}).json() == {"removed": 2}
+    assert [a["kind"] for a in c.get("/api/alerts").json()["alerts"]] == ["confirmed"]
+    assert c.delete("/api/alerts", params={"kind": "bogus"}).status_code == 422
+    assert c.delete("/api/alerts", params={"kind": "all"}).json() == {"removed": 1}
+    assert AlertStore(tmp_path / "c.json").since(0) == [], "removal is persisted"
+    assert c.post("/api/alerts/test").json()["id"] == 5, "ids keep counting up after a clear"

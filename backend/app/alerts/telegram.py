@@ -75,8 +75,9 @@ def _mask(token: Optional[str]) -> Optional[str]:
 class TelegramNotifier:
     def __init__(self, token: Optional[str], chat_id: Optional[str], kinds=DEFAULT_KINDS,
                  session: Optional[requests.Session] = None, background: bool = True):
-        self.token = token or None
-        self.chat_id = str(chat_id) if chat_id else None
+        from app.config import clean_token
+        self.token = clean_token(token)
+        self.chat_id = clean_token(str(chat_id)) if chat_id else None
         self.kinds = set(kinds)
         self.session = session or requests.Session()
         self.background = background
