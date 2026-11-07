@@ -9,7 +9,7 @@ from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from app import nse_data, upstox_data
+from app import nse_data, options_suggest, upstox_data
 from app.nse_data import get_stock_data, get_option_chain
 from app.strategies import analyze_stock
 from app.option_analytics import analyze_chain, normalise_nse_chain, synthetic_chain
@@ -84,6 +84,30 @@ def option_analysis(
     if not chain["rows"]:
         raise HTTPException(status_code=404, detail=f"Empty option chain for {symbol} {chain.get('expiry')}")
     return analyze_chain(chain, window=window)
+
+@app.get("/api/options/{symbol}/suggest")
+def option_suggestion(
+    symbol: str,
+    side: Literal["BUY", "SELL"],
+    target: float = Query(..., gt=0, description="underlying target"),
+    stop: float = Query(..., gt=0, description="underlying stop"),
+    source: Literal["default", "upstox", "synthetic"] = "default",
+    spot: Optional[float] = Query(None, gt=0, description="spot for source=synthetic"),
+):
+    """Option idea for an option BUYER: call for BUY, put for SELL, with premium target/stop."""
+    if source == "default":
+        source = "upstox" if DATA_SOURCE == "upstox" else "synthetic"
+    if (side == "BUY" and not stop < target) or (side == "SELL" and not target < stop):
+        raise HTTPException(status_code=422, detail="For BUY the stop must be below the target; for SELL above it")
+    try:
+        return options_suggest.suggest_for_symbol(symbol.upper(), side, target, stop, source=source, spot=spot)
+    except upstox_data.UpstoxError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not build an option idea for {symbol}: {exc}")
+
 
 @app.get("/api/trending")
 def trending_stocks(limit: int = 10):

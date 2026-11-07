@@ -84,6 +84,15 @@ function AlertCard({ a, onSelect, onDismiss }) {
             {a.kind === "forming" && <em>If the day closes here · </em>}
             {a.reason}
           </div>
+          {a.option && (
+            <div className="alert-option" title={(a.option.warnings || []).join("\n")}>
+              📈 Buy <b>{Number(a.option.strike)} {a.option.type}</b>
+              {a.option.expiry && <span className="muted"> ({new Date(a.option.expiry).toLocaleDateString([], { day: "numeric", month: "short" })})</span>}
+              {" "}@ <b>{fmt(a.option.premium)}</b> → <b className="up">{fmt(a.option.target_premium)}</b> / <b className="down">{fmt(a.option.stop_premium)}</b>
+              {a.option.lot_size && <span className="muted"> · lot {a.option.lot_size} = ₹{fmt(a.option.cost_per_lot, 0)}</span>}
+              {a.option.warnings && a.option.warnings.length > 0 && <span className="opt-warn"> ⚠ {a.option.warnings.length}</span>}
+            </div>
+          )}
         </>
       )}
     </li>

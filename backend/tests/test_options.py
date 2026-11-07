@@ -97,7 +97,8 @@ def test_parse_upstox_option_chain():
     assert c["spot"] == 25012.4 and c["symbol"] == "NIFTY"
     r = c["rows"][0]
     assert r["CE"] == {"ltp": 120.5, "close": 110.0, "oi": 5000.0, "prev_oi": 4000.0, "volume": 1000,
-                       "bid": 120.0, "ask": 121.0, "iv": 13.1, "delta": 0.52, "key": "NSE_FO|1"}
+                       "bid": 120.0, "ask": 121.0, "iv": 13.1, "delta": 0.52, "gamma": 0.001, "theta": -2,
+                       "key": "NSE_FO|1"}
     a = analyze_chain(c)
     assert a["rows"][0]["CE"]["buildup"] == "Long build-up"
     assert a["rows"][0]["PE"]["buildup"] == "Long unwinding"

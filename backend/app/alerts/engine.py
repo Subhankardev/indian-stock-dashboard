@@ -136,20 +136,42 @@ class AlertScanner:
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         open_interval: float = 60.0,
         closed_interval: float = 600.0,
+        option_suggester: Optional[Callable[[str, str, float, float], dict]] = None,
     ):
         self.store, self.load, self.config, self.now = store, load, config or StrategyConfig(), now
         self.open_interval, self.closed_interval = open_interval, closed_interval
+        self.option_suggester = option_suggester
         self.status = {"last_run": None, "phase": None, "errors": {}, "next_run": None}
 
+    def _option_idea(self, symbol, side, target, stop) -> Optional[dict]:
+        """Compact option idea for an option buyer; None if unavailable (no F&O, no token, ...)."""
+        if not self.option_suggester or target is None or stop is None:
+            return None
+        try:
+            full = self.option_suggester(symbol, side, target, stop)
+        except Exception:
+            return None
+        idea = full["ideas"][0]
+        keep = ("type", "strike", "expiry", "premium", "target_premium", "stop_premium", "delta",
+                "reward_risk", "lot_size", "cost_per_lot", "max_loss_per_lot")
+        return {**{k: idea.get(k) for k in keep}, "warnings": full.get("warnings", [])[:3]}
+
     def _alert(self, symbol, kind, side, row, bar_date, reason=None):
-        return self.store.emit({
-            "symbol": symbol, "kind": kind, "side": "BUY" if side == 1 else "SELL",
+        side_txt = "BUY" if side == 1 else "SELL"
+        stop = _num(row["stop"]) if kind != "faded" else None
+        target = _num(row["target"]) if kind != "faded" else None
+        alert = {
+            "symbol": symbol, "kind": kind, "side": side_txt,
             "bar_date": bar_date, "price": _num(row["close"]),
-            "stop": _num(row["stop"]) if kind != "faded" else None,
-            "target": _num(row["target"]) if kind != "faded" else None,
+            "stop": stop, "target": target,
             "wave": row.get("wave_label") or None,
             "reason": reason or row.get("reason") or "",
-        })
+        }
+        if kind in ("forming", "confirmed"):
+            option = self._option_idea(symbol, side_txt, target, stop)
+            if option:
+                alert["option"] = option
+        return self.store.emit(alert)
 
     def scan_symbol(self, symbol: str) -> list[dict]:
         df, _warning = self.load(symbol)

@@ -6,6 +6,7 @@ A full-stack web dashboard for real-time Indian stock market analytics, includin
 
 - **Trending Stock Screener**: See which stocks are trending with signals (BUY/SELL/HOLD).
 - **Technical Indicators**: SMA, RSI, MACD, Bollinger Bands.
+- **Option ideas for buyers**: a suggested call/put strike, expiry and premium target/stop for every signal (see below).
 - **Buy/Sell Alerts**: watchlist scanner with forming / confirmed signal alerts, desktop notifications and Telegram (see below).
 - **Option Chain Analytics** (Upstox): PCR, max pain, OI walls, ATM IV and expected move, OI build-ups per strike (see below).
 - **Wave · GTI · OI Analysis**: Elliott wave structure, Ghost Trade Indicator and futures open interest combined into signals, with a backtest (see below).
@@ -140,6 +141,28 @@ Optional: `TELEGRAM_ALERT_KINDS=confirmed` sends only confirmed signals. The def
 - `POST /api/alerts/telegram/test`
 
 **Environment variables:** `ALERTS_FILE`, `ALERTS_ENABLED` (`0` turns the scanner off), `ALERTS_INTERVAL` (seconds while the market is open; default 60).
+
+## Option ideas for option buyers
+
+When there's a signal today, or an active wave-3 / wave-5 setup, the Wave · GTI · OI panel shows an **option idea**. The same idea is attached to *forming* and *confirmed* alerts, in both the dashboard and Telegram. Code: `backend/app/options_suggest.py`. Endpoint: `GET /api/options/{symbol}/suggest?side=BUY|SELL&target=&stop=`.
+
+- **Contract:** a **call** for BUY, a **put** for SELL. It uses the nearest expiry with at least **4 trading days** left, so time decay doesn't eat the move.
+- **Strike:** the liquid contract whose delta is closest to **0.60** (at-the-money to slightly in-the-money). It also shows an *aggressive* ~0.40-delta strike and a *conservative* ~0.75-delta one. Only contracts with delta between 0.15 and 0.90 are considered.
+- **Premium levels:**
+  - entry: the ask price
+  - target and stop: Black-Scholes estimates of the option at the underlying's wave target and stop, 2 trading days later, using the contract's implied volatility
+  - reward:risk in premium terms
+  - lot size, cost per lot and maximum loss per lot
+- **Warnings:**
+  - options expensive: implied volatility more than 1.3× the 20-day realised volatility
+  - a call or put **OI wall** between price and target (it must stand out from the other strikes)
+  - time decay of 4% of the premium or more per day
+  - a bid-ask spread over 3%
+  - thin liquidity
+  - premium reward smaller than risk
+- **Requirements:** the day's Upstox token, and only for F&O symbols. If an option idea can't be built, the alert still goes out without it.
+
+These are estimates, not quotes, and the option trades themselves aren't backtested yet. The backtest covers the underlying's signals only.
 
 ## Option chain (Upstox)
 
