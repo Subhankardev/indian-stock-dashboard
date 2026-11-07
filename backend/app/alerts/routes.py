@@ -6,6 +6,8 @@
 * ``DELETE /api/alerts/watchlist/{symbol}``  remove one symbol
 * ``POST   /api/alerts/scan``                scan now
 * ``POST   /api/alerts/test``                emit a test alert (to check notifications)
+* ``DELETE /api/alerts?kind=test|all``       clear test alerts / the whole history
+* ``DELETE /api/alerts/{id}``                dismiss one alert
 * ``GET    /api/alerts/telegram/chats``      chats that messaged your bot (to find TELEGRAM_CHAT_ID)
 * ``POST   /api/alerts/telegram/test``       send a test message to Telegram now
 
@@ -97,6 +99,19 @@ def _payload(scanner: AlertScanner, since: int, limit: int) -> dict:
 @router.get("/api/alerts")
 def list_alerts(since: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=500)):
     return _payload(get_scanner(), since, limit)
+
+
+@router.delete("/api/alerts")
+def clear_alerts(kind: str = Query(..., pattern="^(test|forming|faded|confirmed|all)$")):
+    return {"removed": get_scanner().store.remove(kind=kind)}
+
+
+@router.delete("/api/alerts/{alert_id}")
+def dismiss_alert(alert_id: int):
+    removed = get_scanner().store.remove(ids={alert_id})
+    if not removed:
+        raise HTTPException(status_code=404, detail="No such alert")
+    return {"removed": removed}
 
 
 @router.put("/api/alerts/watchlist")

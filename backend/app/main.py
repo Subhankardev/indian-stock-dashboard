@@ -1,7 +1,7 @@
 # Load backend/.env before anything reads its settings.
-from app.config import describe as describe_config, load_env_file
+from app.config import describe as describe_config, load_settings
 
-load_env_file()
+load_settings()
 
 import os
 from datetime import date

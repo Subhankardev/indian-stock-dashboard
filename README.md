@@ -53,6 +53,7 @@ TELEGRAM_CHAT_ID=7844852392
 - A variable exported in your terminal overrides `.env`, which is handy for one-off runs like `DATA_SOURCE=nse uvicorn ...`.
 - **`http://localhost:8000/api/config`** shows every setting the backend sees and where it came from (`.env`, shell, or not set), with secrets masked. Check it first when something "isn't picking up" a setting.
 - The tests never read `.env`, so your real tokens are never used during `pytest`.
+- Long tokens copied from a chat or web page often carry invisible characters (zero-width spaces, soft hyphens) or stray quotes. The backend strips these automatically, and `/api/config` notes when it did.
 
 ### Frontend
 

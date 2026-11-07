@@ -1,27 +1,39 @@
 import React, { useState, useEffect } from "react";
 
+const LABELS = {
+  SMA_5: "SMA 5", SMA_20: "SMA 20", RSI_14: "RSI 14", MACD: "MACD", MACD_signal: "MACD signal",
+  BB_UPPER: "Bollinger upper", BB_MID: "Bollinger mid", BB_LOWER: "Bollinger lower",
+};
+
 function StockDetail({ symbol }) {
   const [stock, setStock] = useState(null);
 
   useEffect(() => {
+    setStock(null);
     fetch(`http://localhost:8000/api/stock/${symbol}`)
       .then(res => res.json())
-      .then(setStock);
+      .then(setStock)
+      .catch(() => setStock({}));
   }, [symbol]);
 
-  if (!stock) return <div>Loading {symbol}...</div>;
-  if (!stock.indicators) return null; // backend error; the panels below show their own messages
+  if (!stock || !stock.indicators) return null; // loading, or an error the panels below explain
 
+  const cls = stock.signal === "BUY" ? "up" : stock.signal === "SELL" ? "down" : "";
   return (
-    <div>
-      <h2>{symbol} — Signal: {stock.signal}</h2>
-      <p>{stock.reason}</p>
-      <h3>Indicators</h3>
-      <ul>
+    <div className="panel technicals">
+      <div className="panel-head">
+        <h3>Classic technicals</h3>
+        <span className={`signal-pill ${cls}`}>{stock.signal}</span>
+        <span className="muted small-text">{stock.reason}</span>
+      </div>
+      <div className="indicator-grid">
         {Object.entries(stock.indicators).map(([k, v]) => (
-          <li key={k}>{k}: {v.toFixed(2)}</li>
+          <div key={k} className="indicator">
+            <span>{LABELS[k] || k}</span>
+            <b>{Number(v).toFixed(2)}</b>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }

@@ -93,6 +93,19 @@ class AlertStore:
                 pass
         return alert
 
+    def remove(self, ids: Optional[set] = None, kind: Optional[str] = None) -> int:
+        """Delete alerts by id and/or kind ("all" = everything). Returns how many went."""
+        with self._lock:
+            before = len(self.data["alerts"])
+            self.data["alerts"] = [
+                a for a in self.data["alerts"]
+                if not ((ids and a["id"] in ids) or kind == "all" or (kind and a["kind"] == kind))
+            ]
+            removed = before - len(self.data["alerts"])
+            if removed:
+                self._save()
+        return removed
+
     def since(self, last_id: int = 0, limit: int = 50) -> list[dict]:
         newer = [a for a in self.data["alerts"] if a["id"] > last_id]
         return list(reversed(newer[-limit:]))

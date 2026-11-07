@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import os
+import re
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -33,6 +35,45 @@ SETTINGS: dict[str, tuple[bool, str]] = {
 
 _sources: dict[str, str] = {}
 _loaded_from: Optional[Path] = None
+_cleaned: dict[str, int] = {}
+
+# Values that must be a single unbroken token: copy/paste junk is stripped from these.
+TOKEN_SETTINGS = ("UPSTOX_ACCESS_TOKEN", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
+_QUOTES = "\"'\u2018\u2019\u201c\u201d`"
+
+
+def clean_token(value: Optional[str]) -> Optional[str]:
+    """Remove what copy/paste adds to long tokens: invisible format characters
+    (zero-width spaces, soft hyphens, BOM, ...), whitespace/line breaks and
+    surrounding quotes (straight or curly). Returns None for empty input."""
+    if value is None:
+        return None
+    kept = "".join(ch for ch in value if not unicodedata.category(ch).startswith(("C", "Z")))
+    kept = kept.strip(_QUOTES)
+    return kept or None
+
+
+def token_problem(value: Optional[str]) -> Optional[str]:
+    if value and not value.isascii():
+        bad = sorted({f"U+{ord(c):04X}" for c in value if not c.isascii()})[:5]
+        return ("contains non-ASCII characters (" + ", ".join(bad) + "); "
+                "re-copy it from the source and type it in without formatting")
+    return None
+
+
+def sanitize_environ() -> None:
+    """Clean token settings in os.environ, whichever way they were set."""
+    for key in TOKEN_SETTINGS:
+        raw = os.environ.get(key)
+        if raw is None:
+            continue
+        cleaned = clean_token(raw)
+        if cleaned != raw:
+            _cleaned[key] = len(raw) - len(cleaned or "")
+            if cleaned:
+                os.environ[key] = cleaned
+            else:
+                del os.environ[key]
 
 
 def load_env_file(path: Path | str = ENV_FILE) -> dict[str, str]:
@@ -43,7 +84,15 @@ def load_env_file(path: Path | str = ENV_FILE) -> dict[str, str]:
         return {}
     _loaded_from = path
     applied = {}
-    for key, value in dotenv_values(path).items():
+    values = dict(dotenv_values(path))
+    # python-dotenv silently drops lines it can't parse, e.g. an unbalanced quote
+    # (KEY='abc). For the settings we know, fall back to the raw text after "=".
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = re.match(r"^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)\s*=(.*)$", line)
+        if m and m.group(1) in SETTINGS and m.group(1) not in values:
+            raw = m.group(2).split(" #")[0].strip()
+            values[m.group(1)] = raw.strip(_QUOTES) if m.group(1) not in TOKEN_SETTINGS else raw
+    for key, value in values.items():
         if value is None or value.strip() == "":
             continue
         if key in os.environ and os.environ[key] != "":
@@ -55,6 +104,12 @@ def load_env_file(path: Path | str = ENV_FILE) -> dict[str, str]:
     return applied
 
 
+def load_settings(path: Path | str = ENV_FILE) -> None:
+    """Startup entry point: read .env, then clean the token settings."""
+    load_env_file(path)
+    sanitize_environ()
+
+
 def _mask(value: str) -> str:
     return value[:4] + "…" + value[-4:] if len(value) > 10 else "…"
 
@@ -64,11 +119,17 @@ def describe() -> dict:
     out = {}
     for name, (secret, help_text) in SETTINGS.items():
         value = os.environ.get(name) or None
+        note = None
+        if name in _cleaned:
+            note = f"removed {_cleaned[name]} hidden/extra characters (copy-paste) - fixed automatically"
+        problem = token_problem(value) if name in TOKEN_SETTINGS else None
         out[name] = {
             "set": value is not None,
             "value": (_mask(value) if secret else value) if value else None,
             "source": (_sources.get(name) or "shell") if value else "not set",
             "help": help_text,
+            **({"note": note} if note else {}),
+            **({"problem": problem} if problem else {}),
         }
     return {"env_file": str(_loaded_from or ENV_FILE), "env_file_found": (_loaded_from or ENV_FILE).is_file(),
             "settings": out}

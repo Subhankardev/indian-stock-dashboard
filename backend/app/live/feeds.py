@@ -108,14 +108,14 @@ class UpstoxFeed(_BaseFeed):
             await self._send("unsub", gone)
 
     async def run(self) -> None:
-        backoff = 1.0
+        backoff = min(1.0, self.max_backoff)  # the cap applies from the first wait
         headers = {"Authorization": f"Bearer {self.token}", "Accept": "*/*"}
         while not self._stopped:
             self.status = "connecting"
             try:
                 async with self._connect(FEED_URL, headers) as ws:
                     self._ws = ws
-                    self.status, self.error, backoff = "connected", None, 1.0
+                    self.status, self.error, backoff = "connected", None, min(1.0, self.max_backoff)
                     if self.keys:
                         await self._send("sub", self.keys, self.mode)
                     async for frame in ws:
