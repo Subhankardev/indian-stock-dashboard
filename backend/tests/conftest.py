@@ -16,6 +16,8 @@ def isolated_alerts(tmp_path, monkeypatch):
     monkeypatch.setenv("ALERTS_ENABLED", "0")
     for var in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_ALERT_KINDS"):
         monkeypatch.delenv(var, raising=False)  # never message a real chat from tests
+    from app.wave_oi import tuning
+    monkeypatch.setattr(tuning, "RULES_FILE", tmp_path / "strategy.json")  # never the real tuned rules
     alert_routes.reset_scanner(None)
     yield
     alert_routes.reset_scanner(None)

@@ -221,6 +221,30 @@ Upstox wss://api.upstox.com/v3/feed/market-data-feed   (protobuf, one connection
 
 Messages sent to the browser: `hello`, `tick` (`{symbol, leg: "EQ"|"FUT", tick, live}`), `feed_status`, `market_status`, `error`. See `app/live/routes.py`.
 
+### Tuning the rules (walk-forward)
+
+`python -m app.tune` (run in `backend/` with the virtualenv active) tests 720 rule combinations on a basket of 10 liquid F&O symbols, using real Upstox history (about 3 years). It takes about 90 seconds.
+
+```bash
+python -m app.tune                     # report only, nothing changes
+python -m app.tune --apply             # also use the tuned rules everywhere (restart the backend)
+python -m app.tune --symbols NIFTY,BANKNIFTY,RELIANCE --days 1460
+python -m app.tune --reset             # back to the built-in rules
+```
+
+- **What's tuned:**
+  - swing size (`zz_atr_mult`)
+  - GTI distance (`gti_mult`)
+  - minimum reward:risk (`min_rr`)
+  - stop placement (`stop_mode`)
+  - whether OI must confirm (`use_oi`)
+  - whether to trade A-B-C corrections (`trade_corrections`)
+  - whether to exit on a GTI flip (`exit_on_gti_flip`)
+- **Measured in R** (profit ÷ amount risked, after fees), so symbols at different prices compare fairly.
+- **Walk-forward:** settings are *chosen* on the older ⅔ of each symbol's history, using an SQN score that needs at least 15 trades. They're *judged* on the most recent ⅓, which the search never sees. Only the out-of-sample numbers estimate future behaviour.
+- **The report** goes to `backend/reports/tuning-<date>.md`, with every combination in a CSV next to it. It compares default vs tuned rules, gives a per-symbol breakdown, and shows buy & hold over the same period.
+- **`--apply`** writes `backend/strategy.json`, a local, gitignored file. The dashboard, backtests and alert scanner then use those rules, and the backtest heading shows "tuned rules · <date>". Query parameters such as `?min_rr=` still override.
+
 ### Tests
 
 ```bash

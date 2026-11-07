@@ -14,6 +14,7 @@ from app.nse_data import get_stock_data, get_option_chain
 from app.strategies import analyze_stock
 from app.option_analytics import analyze_chain, normalise_nse_chain, synthetic_chain
 from app.wave_oi import BacktestConfig, StrategyConfig, build_report, make_synthetic
+from app.wave_oi.tuning import load_rules, split_params
 from contextlib import asynccontextmanager
 
 from app.live import routes as live_routes
@@ -108,10 +109,10 @@ def wave_oi_analysis(
     source: Literal["default", "upstox", "nse", "synthetic"] = Query(
         "default", description="'default' follows DATA_SOURCE; 'synthetic' = offline demo data"),
     use_wave: bool = True,
-    use_oi: bool = True,
+    use_oi: Optional[bool] = Query(None, description="default: active rules (tuned or built-in)"),
     allow_short: bool = True,
-    min_rr: float = Query(1.5, ge=0.0, le=10.0),
-    zz_atr_mult: float = Query(2.5, gt=0.0, le=10.0, description="Swing size in ATRs"),
+    min_rr: Optional[float] = Query(None, ge=0.0, le=10.0, description="default: active rules"),
+    zz_atr_mult: Optional[float] = Query(None, gt=0.0, le=10.0, description="Swing size in ATRs; default: active rules"),
     risk_per_trade: float = Query(0.01, gt=0.0, le=0.1),
     fee_bps: float = Query(5.0, ge=0.0, le=100.0),
 ):
@@ -131,12 +132,16 @@ def wave_oi_analysis(
     if len(df) < 60:
         raise HTTPException(status_code=422, detail=f"Need at least 60 daily bars, got {len(df)}")
 
-    cfg = StrategyConfig(
-        use_wave=use_wave, use_oi=use_oi, allow_short=allow_short,
-        min_rr=min_rr, zz_atr_mult=zz_atr_mult,
-    )
-    bt_cfg = BacktestConfig(risk_per_trade=risk_per_trade, fee_bps=fee_bps)
+    rules = load_rules()  # backend/strategy.json from `python -m app.tune --apply`, else defaults
+    params = dict(rules["params"])
+    for name, value in (("use_oi", use_oi), ("min_rr", min_rr), ("zz_atr_mult", zz_atr_mult)):
+        if value is not None:
+            params[name] = value
+    cfg, bt_cfg = split_params({**params, "use_wave": use_wave, "allow_short": allow_short})
+    bt_cfg.risk_per_trade, bt_cfg.fee_bps = risk_per_trade, fee_bps
     report = build_report(df, symbol, cfg, bt_cfg, source=source)
+    report["rules"] = {"source": rules["source"], "tuned_at": rules["tuned_at"], "params": params,
+                       "summary": rules["summary"]}
     report["warning"] = warning
     return report
 

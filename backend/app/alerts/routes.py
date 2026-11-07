@@ -54,7 +54,9 @@ def get_scanner() -> AlertScanner:
     if _scanner is None:
         store = AlertStore(os.getenv("ALERTS_FILE") or DEFAULT_FILE)
         store.listeners.append(get_telegram())
-        _scanner = AlertScanner(store, _default_loader,
+        from app.wave_oi.tuning import load_rules, split_params
+        strategy, _ = split_params(load_rules()["params"])  # same rules as the dashboard
+        _scanner = AlertScanner(store, _default_loader, config=strategy,
                                 open_interval=float(os.getenv("ALERTS_INTERVAL", "60")))
     return _scanner
 
