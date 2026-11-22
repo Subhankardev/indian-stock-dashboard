@@ -162,3 +162,13 @@ def test_add_missing_columns_migrates_old_tables(tmp_path):
     eng = db.engine(url)
     cols = {c["name"] for c in sa.inspect(eng).get_columns("paper_trades")}
     assert {"trigger", "filled", "exit_reason", "r_multiple"} <= cols
+
+
+def test_setup_without_industry_is_json_safe():
+    """Upstox-only data has no industry (NaN): the setup must still serialise (it broke the Trade setup panel)."""
+    import json
+    hist = pd.DataFrame({"low": [97.0] * 10, "high": [103.0] * 10})
+    s = setups.setup_for(_row(industry=float("nan")), hist, "bullish", CFG)
+    assert s["industry"] is None and s["valid"]
+    json.dumps(s, allow_nan=False)
+    assert setups.check_limits({**s}, pd.DataFrame(columns=["symbol", "industry", "status", "qty", "entry", "trigger"]), CFG) == []
