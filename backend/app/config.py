@@ -3,7 +3,7 @@
 ``load_env_file()`` runs once at startup (top of ``app.main``). Rules:
 
 * A variable already set in the shell wins over ``.env`` (handy for one-off
-  overrides like ``DATA_SOURCE=nse uvicorn ...``); ``GET /api/config`` shows when
+  overrides like ``DATABASE_URL=... uvicorn ...``); ``GET /api/config`` shows when
   that happens, so a stale ``export`` can't silently shadow the file.
 * Empty values (``UPSTOX_ACCESS_TOKEN=``) count as "not set".
 * Edits to ``.env`` take effect after restarting the backend.
@@ -22,7 +22,8 @@ ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 # name -> (secret?, what it is for)
 SETTINGS: dict[str, tuple[bool, str]] = {
-    "DATA_SOURCE": (False, "upstox (default) or nse"),
+    "DATABASE_URL": (True, "intel database (default sqlite:///backend/data/intel.db); postgresql://... for Postgres"),
+    "INTEL_CONFIG": (False, "intel settings file (default backend/intel_config.json)"),
     "UPSTOX_ACCESS_TOKEN": (True, "Upstox token: live feed, option chain, longer OI history (expires daily)"),
     "UPSTOX_MAX_EXPIRED": (False, "expired futures contracts to pull for OI history (default 24)"),
     "UPSTOX_API_KEY": (False, "API key of your Upstox app - enables the 'Log in with Upstox' button"),
@@ -31,10 +32,7 @@ SETTINGS: dict[str, tuple[bool, str]] = {
                                    "(default http://localhost:8000/api/upstox/callback)"),
     "TELEGRAM_BOT_TOKEN": (True, "Telegram bot token from @BotFather"),
     "TELEGRAM_CHAT_ID": (False, "Telegram chat to send alerts to"),
-    "TELEGRAM_ALERT_KINDS": (False, "alert kinds sent to Telegram (default forming,confirmed,faded,test)"),
-    "ALERTS_ENABLED": (False, "0 turns the alert scanner off (default 1)"),
-    "ALERTS_INTERVAL": (False, "seconds between scans while the market is open (default 60)"),
-    "ALERTS_FILE": (False, "where the watchlist and alerts are stored (default backend/.alerts.json)"),
+    "TELEGRAM_ALERT_KINDS": (False, "alert kinds sent to Telegram"),
 }
 
 _sources: dict[str, str] = {}

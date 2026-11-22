@@ -186,12 +186,6 @@ def test_api_options_rejects_bad_expiry():
     assert TestClient(app).get("/api/options/NIFTY", params={"expiry": "26-11-2026"}).status_code == 422
 
 
-def test_api_stock_fetch_failure_is_502(monkeypatch):
-    import app.main as main
-
-    def boom(symbol):
-        raise RuntimeError("network down")
-    monkeypatch.setattr(main, "load_daily_prices", boom)
-    r = TestClient(app).get("/api/stock/RELIANCE", headers={"Origin": "http://localhost:3000"})
-    assert r.status_code == 502 and "network down" in r.json()["detail"]
-    assert r.headers.get("access-control-allow-origin") == "*"
+def test_api_errors_keep_cors_headers():
+    r = TestClient(app).get("/api/intel/stock/NOPE", headers={"Origin": "http://localhost:3000"})
+    assert r.status_code == 404 and r.headers.get("access-control-allow-origin") == "*"

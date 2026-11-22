@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.wave_oi.oi import classify_regime
+from app.option_analytics import classify_regime
 
 LIVE_MIN_OI_CHANGE = 0.005  # 0.5% intraday OI move counts as a build-up / unwind
 
