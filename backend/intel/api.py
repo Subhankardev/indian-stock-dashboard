@@ -467,3 +467,117 @@ async def stock_score(symbol: str, preview: bool = False):
             "liquid": bool(r.get("liquid")), "min_confidence": cfg["scoring"]["min_confidence"],
             "scores": sides, "factors": factors, "conflicts": scoring.conflicts(r),
             "history": records(history[["date", "bullish_score", "bullish_confidence"]])}
+
+
+# ------------------------------------------------------------- Phase 7 --- #
+@router.get("/stock/{symbol}/setup")
+async def stock_setup(symbol: str, direction: str = Query("bullish", pattern="^(bullish|bearish)$")):
+    """Trade setup (trigger, ATR/swing stop, targets, size, costs) for paper trading."""
+    from .setups import check_limits, setup_for
+    from .paper import trades
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    g = panel[panel["symbol"] == symbol.upper()] if not panel.empty else panel
+    if g.empty:
+        raise HTTPException(404, f"No data for {symbol.upper()}")
+    s = setup_for(g.iloc[-1], g, direction)
+    s["limit_problems"] = check_limits(s, trades(eng, ["pending", "open"])) if s.get("valid") else []
+    s["config"] = {k: load()["trading"][k] for k in ("capital", "risk_per_trade_pct", "atr_mult", "entry",
+                                                      "targets_r", "exit_target_index", "time_exit_sessions")}
+    return s
+
+
+class _PaperIn(BaseModel):
+    symbol: str
+    direction: str = "bullish"
+    notes: str = ""
+
+
+@router.get("/paper")
+def paper_list():
+    """All paper trades and performance. Simulated — no orders are ever placed."""
+    from .paper import report, trades
+    eng = db.engine()
+    t = trades(eng).sort_values("id", ascending=False) if len(trades(eng)) else trades(eng)
+    return {"trades": records(t.drop(columns=["notes"], errors="ignore")), "report": report(eng),
+            "demo": _is_demo(eng)}
+
+
+@router.post("/paper")
+async def paper_open(body: _PaperIn):
+    from .paper import open_trade
+    from .setups import setup_for
+    if body.direction not in ("bullish", "bearish"):
+        raise HTTPException(422, "direction must be bullish or bearish")
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    g = panel[panel["symbol"] == body.symbol.upper()] if not panel.empty else panel
+    if g.empty:
+        raise HTTPException(404, f"No data for {body.symbol.upper()}")
+    res = open_trade(eng, setup_for(g.iloc[-1], g, body.direction), notes=body.notes)
+    if not res["ok"]:
+        raise HTTPException(409, "; ".join(res["reasons"]))
+    return res
+
+
+@router.post("/paper/update")
+def paper_update():
+    from .paper import update_all
+    return update_all(db.engine())
+
+
+@router.post("/paper/auto")
+async def paper_auto():
+    from .paper import auto
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    return await run_in_threadpool(auto, eng, panel)
+
+
+@router.post("/paper/{trade_id}/close")
+async def paper_close(trade_id: int):
+    from .paper import close_manual, trades
+    eng = db.engine()
+    t = trades(eng)
+    row = t[t["id"] == trade_id]
+    if row.empty:
+        raise HTTPException(404, "no such paper trade")
+    panel = await run_in_threadpool(panel_cached, eng)
+    g = panel[panel["symbol"] == row.iloc[0]["symbol"]]
+    if g.empty:
+        raise HTTPException(409, "no price to close at")
+    res = close_manual(eng, trade_id, float(g.iloc[-1]["close"]), pd.Timestamp(g.iloc[-1]["date"]).date())
+    if not res["ok"]:
+        raise HTTPException(409, res["reason"])
+    return {k: _clean(v) for k, v in res.items()}
+
+
+@router.get("/alerts")
+def alerts_list(limit: int = Query(200, ge=1, le=2000)):
+    from app.alerts.telegram import TelegramNotifier
+    from .alerts import recent
+    eng = db.engine()
+    return {"alerts": records(recent(eng, limit)), "telegram": TelegramNotifier.from_env().info(),
+            "kinds": load()["alerts"]["kinds"], "demo": _is_demo(eng)}
+
+
+@router.post("/alerts/run")
+async def alerts_run(send: bool = True):
+    from .alerts import generate, send_pending
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    made = await run_in_threadpool(generate, eng, panel)
+    sent = await run_in_threadpool(send_pending, eng) if send else None
+    return {"generated": made, "telegram": sent}
+
+
+@router.post("/alerts/test")
+async def alerts_test():
+    from datetime import datetime
+    from .alerts import add, send_pending
+    eng = db.engine()
+    add(eng, "test", None, None, date.today(), f"Test alert {datetime.now():%H:%M:%S}", "Telegram alerts work.")
+    res = await run_in_threadpool(send_pending, eng)
+    if res.get("skipped"):
+        raise HTTPException(400, res["skipped"] + " — set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in backend/.env")
+    return res

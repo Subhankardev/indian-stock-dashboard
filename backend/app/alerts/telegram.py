@@ -44,6 +44,8 @@ def _fmt(v, d: int = 2) -> str:
 def format_message(alert: dict) -> str:
     """Telegram HTML message for one alert."""
     e = html.escape
+    if alert.get("html"):  # pre-formatted (intel.alerts builds its own escaped HTML)
+        return alert["html"]
     kind, side, sym = alert.get("kind"), alert.get("side"), alert.get("symbol", "")
     if kind == "test":
         return "🔔 <b>Test alert</b>\nTelegram alerts from your stock dashboard are working."

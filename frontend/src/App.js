@@ -6,9 +6,11 @@ import Research from "./intel/Research";
 import Institutional from "./intel/Institutional";
 import Derivatives from "./intel/Derivatives";
 import Rankings from "./intel/Rankings";
+import Paper from "./intel/Paper";
+import Alerts from "./intel/Alerts";
 import "./App.css";
 
-const TABS = [["overview", "Overview"], ["rankings", "Rankings"], ["screener", "Screener"], ["institutional", "Institutional"], ["derivatives", "Derivatives"], ["stock", "Stock"], ["research", "Research"]];
+const TABS = [["overview", "Overview"], ["rankings", "Rankings"], ["screener", "Screener"], ["institutional", "Institutional"], ["derivatives", "Derivatives"], ["stock", "Stock"], ["paper", "Paper"], ["alerts", "Alerts"], ["research", "Research"]];
 
 function App() {
   const [tab, setTab] = useState("screener");
@@ -33,6 +35,8 @@ function App() {
         {tab === "institutional" && <Institutional onOpen={open} />}
         {tab === "rankings" && <Rankings onOpen={open} />}
         {tab === "derivatives" && <Derivatives onOpen={open} />}
+        {tab === "paper" && <Paper onOpen={open} />}
+        {tab === "alerts" && <Alerts onOpen={open} />}
         {tab === "research" && <Research />}
         <p className="disclaimer">Research tool, not investment advice. Signals are tested on history before use; no trades are placed.</p>
       </main>

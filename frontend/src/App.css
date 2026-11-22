@@ -424,3 +424,6 @@ ul.evidence li { padding: 4px 0; }
 th.inactive { text-decoration: line-through; }
 .factor-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
 .cls-S { background: #fae8ff; color: #86198f; }
+.nav { flex-wrap: wrap; }
+.nav button { padding: 6px 9px; font-size: 13px; }
+.topbar .search { min-width: 180px; max-width: 320px; }
