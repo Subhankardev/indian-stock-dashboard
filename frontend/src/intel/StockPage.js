@@ -3,6 +3,7 @@ import { getJSON, fmt, pct, cls } from "./api";
 import { BarChart, DemoBanner, ErrorBox, Legend, LineChart } from "./Common";
 import OptionChainPanel from "../components/OptionChainPanel";
 import EvidencePanel from "./EvidencePanel";
+import FuturesPanel from "./FuturesPanel";
 
 const RANGES = [["3M", 63], ["6M", 126], ["1Y", 250], ["2Y", 500]];
 
@@ -73,6 +74,7 @@ export default function StockPage({ symbol }) {
           High delivery is a clue, not proof, of institutional buying (evidence class D).</div>
       </div>
       <EvidencePanel symbol={symbol} />
+      <FuturesPanel symbol={symbol} />
       {d.source && (
         <div className="provenance">Latest price row from <b>{d.source.dataset}</b> file for {d.source.as_of},
           fetched {d.source.fetched_at} · {d.source.url}</div>

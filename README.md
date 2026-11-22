@@ -13,8 +13,9 @@ Design, data sources, schema, methodology and roadmap: **[docs/DESIGN.md](docs/D
 | 0 | Design (docs/DESIGN.md) | done |
 | 1 | NSE download + provenance, universe, liquidity filters, indicators, relative strength, event-study / walk-forward backtest framework, screener / stock / research pages | done |
 | 2 | Delivery analytics, bulk/block deals with entity classes, FII/DII, shareholding + MF imports, accumulation/distribution evidence (classes A–E), Institutional page | done |
-| 3 | F&O build-ups, basis, PCR/IV, participant OI | next |
-| 4–9 | VWAP/order flow, fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
+| 3 | F&O: futures build-ups (class F), basis, rollover, PCR, max-OI strikes, ATM IV, participant OI; Derivatives page | done |
+| 4 | VWAP / anchored VWAP; order flow behind a flag | next |
+| 5–9 | Fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
 
 ## Quick start (on your Mac)
 
@@ -96,11 +97,32 @@ Every piece of accumulation/distribution evidence carries a class, shown whereve
 - **Accumulation / distribution score** = 0.30·A + 0.25·B + 0.30·D + 0.15·derivatives. A component is weighted **only after its signal passes** its event study on the Research page (`scoring.require_pass`). Confidence is the share of components that have data; derivatives arrive in Phase 3, so confidence is at most 85% for now.
 - `python -m intel.evidence --store` writes every fired signal, with its evidence, to the `signals` table.
 
+## Derivatives (Phase 3)
+
+`python -m intel.ingest --days 60 --datasets fo,participant_oi` loads the F&O bhavcopy and participant-wise OI.
+
+- Each day's F&O file is summarised **per underlying** into `deriv_daily`:
+  - total futures OI across expiries, so monthly rollover isn't mistaken for unwinding
+  - basis and rollover %
+  - near-expiry PCR, the strikes with the highest call and put OI
+  - ATM implied volatility (Black-Scholes, solved from the settlement price)
+- Raw option rows (about 50–100k a day) aren't stored unless `nse.store_option_rows` is true. Run `python -m intel.derivatives --rebuild` to recompute the summaries from stored rows.
+- **Build-ups (class F)** compare the 5-session price change with the change in total futures OI (threshold ±5%):
+  - long build-up: price up, OI up
+  - short build-up: price down, OI up
+  - short covering: price up, OI down
+  - long unwinding: price down, OI down
+
+  They are blanked for 3 sessions after an expiry. They describe positioning, not who traded.
+- **Participant OI** (FII/DII/Pro/Client share of index-futures longs) is market-wide (class C).
+- Futures build-ups are the derivatives component (weight 0.15) of the accumulation and distribution scores, and count only after `long_buildup` or `short_buildup` passes its test.
+
 ## Pages
 
 - **Screener**: the latest session for every liquid stock, sortable by RS rank, relative strength over 3/6 months, RS momentum, RVOL, delivery % and its 20-day average, RSI, ADX, distance from the 52-week high and average traded value. Filter by industry.
 - **Stock**: price with EMA 20 / 50 DMA / 200 DMA, volume, the RS line vs Nifty 50, daily delivery %, the accumulation/distribution evidence with classes, shareholding and deals, and the file the latest row came from. With an Upstox token, also the option chain.
 - **Institutional**: FII/DII flows (class C), stocks with the most accumulation/distribution evidence, and recent bulk/block deals with entity classes.
+- **Derivatives**: participant index-futures positioning, NIFTY PCR and IV, and today's stock futures build-ups.
 - **Research**: each signal's event study, giving events, hit rate, 20-day excess return after costs, 95% range, sub-period results and a PASS/fail verdict with the reason.
 - **Overview**: data freshness per dataset (flags stale data), recent download errors, the source registry, and the active configuration.
 
@@ -135,6 +157,7 @@ backend/intel/
   entities.py       deal-client classification (rules + manual overrides)
   evidence.py       accumulation/distribution evidence, classes A–E, scores
   imports.py        CSV imports: deals, shareholding, MF holdings, FII/DII
+  derivatives.py    F&O daily summaries, implied volatility, build-ups, participant OI
   panel.py          universe + liquidity filters + indicators per stock/date
   research/         event study, signals, walk-forward, CLI
   api.py            /api/intel/* endpoints

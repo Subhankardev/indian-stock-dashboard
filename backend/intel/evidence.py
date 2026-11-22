@@ -9,6 +9,8 @@ Every feature is computed only from data published by the row's date:
   monthly MF holdings (effective from ``published_on``).
 * Class C (market-wide): FII/DII cash flows. Never attached to a stock.
 * Class D (possible accumulation/distribution, inferred from price, volume and delivery).
+* Class F (derivatives positioning): futures price/OI build-ups (``intel.derivatives``). Says
+  nothing about who traded.
 * Class E (unclassified large activity): bulk/block deals by non-institutional clients and
   volume spikes without direction. Shown, never scored.
 
@@ -216,14 +218,18 @@ def attach(eng, panel: pd.DataFrame) -> pd.DataFrame:
     """Panel + all stock-level evidence columns (A, B, D, E)."""
     if panel.empty:
         return panel
-    return pd.concat([panel, inferred(panel), deal_features(eng, panel), ownership_features(eng, panel)], axis=1)
+    from .derivatives import features as deriv_features
+    return pd.concat([panel, inferred(panel), deal_features(eng, panel), ownership_features(eng, panel),
+                      deriv_features(eng, panel)], axis=1)
 
 
 COMPONENT_SIGNALS = {
-    "accumulation": {"A": "inst_deal_buy", "B": "ownership_increase", "D": "possible_accumulation"},
-    "distribution": {"A": "inst_deal_sell", "B": "ownership_decrease", "D": "possible_distribution"},
+    "accumulation": {"A": "inst_deal_buy", "B": "ownership_increase", "D": "possible_accumulation",
+                     "F": "long_buildup"},
+    "distribution": {"A": "inst_deal_sell", "B": "ownership_decrease", "D": "possible_distribution",
+                     "F": "short_buildup"},
 }
-COMPONENT_WEIGHTS = {"A": 0.30, "B": 0.25, "D": 0.30, "F": 0.15}  # F = derivatives (Phase 3)
+COMPONENT_WEIGHTS = {"A": 0.30, "B": 0.25, "D": 0.30, "F": 0.15}  # F = futures build-ups
 
 
 def passed_signals(eng) -> set[str]:
@@ -245,8 +251,8 @@ def scores(snap: pd.DataFrame, panel: pd.DataFrame, passed: set[str], require_pa
     Components (0–100): A = 20-session net institutional deal value relative to traded value
     (cross-sectional percentile; 0 deals → 50 = no evidence either way, counted as data present
     only when deal files exist); B = latest institutional ownership change (percentile);
-    D = share of class-D sub-signals firing. F (derivatives) arrives in Phase 3, so it is always
-    missing and lowers confidence. A component is *weighted* only if its signal passed its test
+    D = share of class-D sub-signals firing; F = OI growth during a long (or short) futures
+    build-up, percentile among F&O stocks — missing for stocks without F&O. A component is *weighted* only if its signal passed its test
     (unless require_pass is False); confidence = sum of weights of components that have data.
     """
     out = snap[["symbol"]].copy()
@@ -262,11 +268,13 @@ def scores(snap: pd.DataFrame, panel: pd.DataFrame, passed: set[str], require_pa
             "A": _pct_rank(a_rel).to_numpy() if have_deals else np.full(len(sym), np.nan),
             "B": _pct_rank(snap["b_inst_change_pp_last"]).to_numpy() if "b_inst_change_pp_last" in snap else np.full(len(sym), np.nan),
             "D": (snap["d_score"] / len(ACC_SUBS) * 100).to_numpy() if "d_score" in snap else np.full(len(sym), np.nan),
+            "F": _pct_rank(snap["f_long_strength"].astype(float)).to_numpy() if "f_long_strength" in snap else np.full(len(sym), np.nan),
         },
         "distribution": {
             "A": _pct_rank(-a_rel).to_numpy() if have_deals else np.full(len(sym), np.nan),
             "B": _pct_rank(-snap["b_inst_change_pp_last"]).to_numpy() if "b_inst_change_pp_last" in snap else np.full(len(sym), np.nan),
             "D": (snap["x_score"] / len(DIST_SUBS) * 100).to_numpy() if "x_score" in snap else np.full(len(sym), np.nan),
+            "F": _pct_rank(snap["f_short_strength"].astype(float)).to_numpy() if "f_short_strength" in snap else np.full(len(sym), np.nan),
         },
     }
     for side, parts in comp.items():
@@ -308,6 +316,13 @@ def stock_evidence(eng, row: pd.Series) -> list[dict]:
     if v is not None and not pd.isna(v):
         items.append({"class": "B", "direction": "bullish" if v > 0 else "bearish" if v < 0 else "neutral",
                       "label": "Mutual-fund holdings change", "detail": f"MF shares {v:+.1f}% vs prior month (latest published)"})
+    b = row.get("f_buildup")
+    if isinstance(b, str) and b in ("long_buildup", "short_buildup", "short_covering", "long_unwinding"):
+        label = b.replace("_", " ").capitalize()
+        items.append({"class": "F", "direction": "bullish" if b in ("long_buildup", "short_covering") else "bearish",
+                      "label": f"Futures: {label}",
+                      "detail": f"price {row.get('f_ret_pct'):+.1f}% with total futures OI {row.get('f_oi_chg_pct'):+.1f}% "
+                                f"over 5 sessions — positioning, not proof of who traded"})
     return items
 
 

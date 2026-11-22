@@ -79,6 +79,23 @@ fo_daily = Table(
     Column("source_id", Integer),
 )
 
+deriv_daily = Table(
+    "deriv_daily", meta,                   # one row per underlying per day, from the F&O bhavcopy
+    Column("date", Date, primary_key=True),
+    Column("symbol", String(40), primary_key=True),
+    Column("kind", String(6)),             # stock | index
+    Column("underlying", Float),
+    Column("near_expiry", Date), Column("days_to_expiry", Integer),
+    Column("fut_close", Float), Column("fut_oi", Float), Column("fut_oi_change", Float),
+    Column("fut_volume", Float), Column("basis_pct", Float), Column("rollover_pct", Float),
+    Column("ce_oi", Float), Column("pe_oi", Float), Column("pcr_oi", Float),
+    Column("ce_volume", Float), Column("pe_volume", Float), Column("pcr_volume", Float),
+    Column("max_ce_oi_strike", Float), Column("max_pe_oi_strike", Float),
+    Column("atm_strike", Float), Column("atm_iv", Float),
+    Column("lot_size", Float),
+    Column("source_id", Integer),
+)
+
 participant_oi = Table(
     "participant_oi", meta,
     Column("date", Date, primary_key=True),

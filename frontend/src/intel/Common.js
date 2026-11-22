@@ -75,6 +75,7 @@ export const CLASS_INFO = {
   C: "C · market-wide positioning — never stock-specific",
   D: "D · possible accumulation/distribution, inferred from price, volume and delivery",
   E: "E · unclassified large activity — direction or identity unknown",
+  F: "F · derivatives positioning (futures price/OI build-ups) — not who traded",
   T: "T · technical / relative-strength signal",
 };
 
