@@ -121,7 +121,7 @@ def load_equities(eng, client, start: date, end: date, fo_only=False, symbols=No
     for n, inst in enumerate(todo, 1):
         sym = str(inst["trading_symbol"]).upper()
         try:
-            candles = client.daily_candles(inst["instrument_key"], start, end, include_today=False)
+            candles = _retry(client.daily_candles, inst["instrument_key"], start, end, include_today=False)
         except Exception as exc:
             errors.append(f"{sym}: {exc}")
             continue
@@ -195,15 +195,20 @@ def deriv_rows(symbol: str, kind: str, spot: pd.Series, contracts: list[tuple[da
 
 
 def _has_history(eng, sym: str, start: date) -> bool:
-    """True if deriv_daily already reaches back to within ~45 days of ``start`` for this underlying."""
-    from sqlalchemy import func
-    t = db.deriv_daily
+    """True once this underlying's full futures history (live + expired contracts back to ``start``)
+    has been loaded without errors — recorded as a marker in source_files."""
+    t = db.source_files
     with eng.connect() as c:
-        first = c.execute(select(func.min(t.c.date)).where(t.c.symbol == sym, t.c.fut_oi.isnot(None))).scalar()
-    return first is not None and first <= start + timedelta(days=45)
+        row = c.execute(select(t.c.as_of).where(t.c.dataset == f"upstox_fo_hist:{sym}", t.c.status == "ok")
+                        .order_by(t.c.as_of).limit(1)).first()
+    return row is not None and row[0] <= start
 
 
-def load_futures(eng, client, start: date, end: date, symbols=None, max_expired: int = 40,
+def _mark_history(eng, sym: str, start: date) -> None:
+    db.record_source(eng, f"upstox_fo_hist:{sym}", start, f"upstox://futures history {sym} from {start}", None, 0, "ok")
+
+
+def load_futures(eng, client, start: date, end: date, symbols=None, max_expired: int = 80,
                  missing_only: bool = False) -> dict:
     """Futures OI history for F&O stocks and NIFTY/BANKNIFTY into deriv_daily (keeps option fields).
 
@@ -228,25 +233,29 @@ def load_futures(eng, client, start: date, end: date, symbols=None, max_expired:
             skipped += 1
             continue
         try:
-            spot = client.daily_candles(under_key, start, end, include_today=False)["close"]
+            spot = _retry(client.daily_candles, under_key, start, end, include_today=False)["close"]
             contracts = [(pd.Timestamp(f["expiry"], unit="ms").date() if isinstance(f.get("expiry"), (int, float))
                           else pd.Timestamp(f["expiry"]).date(),
-                          client.daily_candles(f["instrument_key"], start, end, include_today=False))
+                          _retry(client.daily_candles, f["instrument_key"], start, end, include_today=False))
                          for f in find_futures(ins, sym)]
         except Exception as exc:
             errors.append(f"{sym}: {_short(exc)}")
             continue
+        history_ok = True
         if client.token and start < end - timedelta(days=95):
             try:
                 contracts += _expired(client, under_key, start, max_expired)
             except Exception as exc:          # keep the live contracts; fill history on a later run
                 partial.append(f"{sym}: {_short(exc)}")
+                history_ok = False
         rows = deriv_rows(sym, kind, spot, contracts)
         if rows.empty:
             continue
         rows = rows[(rows["date"] >= start) & (rows["date"] <= end)]
         _merge_deriv(eng, rows, src)
         done += 1
+        if history_ok:
+            _mark_history(eng, sym, start)
         latest = max(latest or rows["date"].max(), rows["date"].max())
     _finalize_source(eng, src, "upstox_fo", latest or end, done, "ok" if done or not errors else "error",
                      "; ".join((errors + partial)[:5]) or None)
@@ -254,7 +263,7 @@ def load_futures(eng, client, start: date, end: date, symbols=None, max_expired:
            "first_errors": (errors + partial)[:3]}
     if missing_only:
         out["already_complete"] = skipped
-    if partial:
+    if partial or errors:
         out["next"] = "python -m intel.upstox_ingest --futures-only --from %s   (fills the missing history)" % start
     return out
 
@@ -263,24 +272,41 @@ def _short(exc: Exception) -> str:
     m = str(exc)
     if "429" in m:
         return "Upstox rate limit (HTTP 429)"
+    if _transient(exc):
+        return "network error (timeout / connection dropped — Mac asleep or Wi-Fi?)"
     return m[:160]
+
+
+_TRANSIENT = ("429", "timed out", "Timeout", "Max retries exceeded", "Connection", "Temporary failure",
+              "NameResolution", "RemoteDisconnected", "HTTP 50")
+
+
+def _transient(exc: Exception) -> bool:
+    """Rate limits and network blips (Wi-Fi drop, Mac waking from sleep, Upstox 5xx) are retried."""
+    m = f"{type(exc).__name__}: {exc}"
+    return any(t in m for t in _TRANSIENT)
+
+
+def _retry(fn, *args, waits=(0, 5, 15, 30, 60), gap: float = 0.0, **kw):
+    last = None
+    for wait in waits:
+        if wait:
+            time.sleep(wait)
+        if gap:
+            time.sleep(gap)
+        try:
+            return fn(*args, **kw)
+        except Exception as exc:
+            if not _transient(exc):
+                raise
+            last = exc
+    raise last
 
 
 def _slow_get(client, path: str, params: Optional[dict] = None) -> dict:
     """Upstox expired-instrument endpoints rate-limit hard: space calls and back off long on 429."""
     import os
-    gap = float(os.getenv("UPSTOX_EXPIRED_INTERVAL", "0.35"))
-    for wait in (0, 5, 15, 30, 60):
-        if wait:
-            time.sleep(wait)
-        time.sleep(gap)
-        try:
-            return client._get(path, params)
-        except Exception as exc:
-            if "429" not in str(exc):
-                raise
-            last = exc
-    raise last
+    return _retry(client._get, path, params, gap=float(os.getenv("UPSTOX_EXPIRED_INTERVAL", "0.35")))
 
 
 def _expired(client, under_key: str, start: date, max_contracts: int) -> list:
