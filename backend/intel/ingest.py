@@ -68,6 +68,12 @@ def load_day(eng, fetcher: Fetcher, dataset: str, day: date, force: bool = False
     df = df.assign(source_id=src)
     if "date" in df.columns:
         df = df[df["date"] == day] if (df["date"] == day).any() else df
+    if dataset == "fo":
+        from .config import load
+        from .derivatives import store_day
+        store_day(eng, df, src)  # per-underlying summary (futures OI, basis, PCR, ATM IV)
+        if not load()["nse"].get("store_option_rows"):
+            df = df[df["instrument"].isin(["STF", "IDF"])]
     db.replace_rows(eng, table, df, [table.c.date == day])
     return "ok" if len(df) else "empty"
 

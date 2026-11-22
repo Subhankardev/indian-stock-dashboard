@@ -409,3 +409,4 @@ ul.subs li.on { color: var(--text); font-weight: 600; }
 ul.subs li.on .dot-ind { color: var(--amber); }
 ul.evidence li { padding: 4px 0; }
 .section-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 8px 0 6px; }
+.cls-F { background: #ffe4e6; color: #9f1239; }

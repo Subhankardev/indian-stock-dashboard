@@ -145,7 +145,7 @@ def test_scores_need_passed_components(eng):
     snap = latest_snapshot(panel)
     gated = evidence.scores(snap, panel, passed=set())
     assert gated["accumulation_score"].isna().all(), "no component has passed -> no score"
-    assert np.allclose(gated["accumulation_confidence"], 0.85), "A+B+D have data, derivatives (0.15) missing"
+    assert set(gated["accumulation_confidence"].round(2)) <= {0.85, 1.0}, "A+B+D always; F only for F&O stocks"
     only_d = evidence.scores(snap, panel, passed={"possible_accumulation"})
     np.testing.assert_allclose(only_d["accumulation_score"], snap["d_score"] / 5 * 100)
 
@@ -169,7 +169,7 @@ def test_phase2_api(eng):
     sym = r["accumulation"][0]["symbol"]
     e = c.get(f"/api/intel/stock/{sym}/evidence").json()
     assert set(e["subsignals"]) == {"accumulation", "distribution"} and e["ownership"]
-    assert all(i["class"] in "ABCDE" for i in e["items"])
+    assert all(i["class"] in "ABCDEF" for i in e["items"])
     ents = c.get("/api/intel/entities").json()["entities"]
     assert any(x["entity_class"] == "mutual_fund" for x in ents)
     assert c.put("/api/intel/entities", json={"name": "X", "entity_class": "whale"}).status_code == 422

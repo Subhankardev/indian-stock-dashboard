@@ -279,3 +279,41 @@ def entities_set(body: _EntityIn):
     set_manual(db.engine(), body.name, body.entity_class, body.notes)
     _cache.clear()
     return {"ok": True}
+
+
+# ------------------------------------------------------------- Phase 3 --- #
+@router.get("/derivatives")
+async def derivatives_view(limit: int = Query(20, ge=1, le=200)):
+    """Market-wide participant positioning (class C), index option/futures data, and
+    stock futures build-ups on the latest session (class F)."""
+    from . import derivatives as dv
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    part = dv.participant_summary(eng)
+    idx = dv.index_summary(eng)
+    out = {"demo": _is_demo(eng), "participants": records(part), "indices": records(idx),
+           "note": "Build-ups describe futures positioning from price and open interest. They do not show who "
+                   "traded; an OI increase is not institutional buying. Participant OI is market-wide (class C).",
+           "buildups": {}, "counts": {},
+           "sources": _sources_for(eng, ["fo", "participant_oi", "demo"])}
+    if not panel.empty and "f_buildup" in panel:
+        snap = latest_snapshot(panel)
+        fo = snap[snap["f_has_fo"].fillna(False).astype(bool)]
+        cols = ["symbol", "industry", "close", "f_ret_pct", "f_oi_chg_pct", "f_basis_pct", "f_rollover_pct",
+                "f_pcr_oi", "f_atm_iv", "rs_rank"]
+        for b in dv.BUILDUPS:
+            sub = fo[fo["f_buildup"] == b].sort_values("f_oi_chg_pct", ascending=b in ("short_covering", "long_unwinding"))
+            out["buildups"][b] = records(sub[cols].head(limit))
+        out["counts"] = {str(k): int(v) for k, v in fo["f_buildup"].fillna("no data").value_counts().items()}
+        out["as_of"] = _clean(snap["date"].iloc[0])
+    return out
+
+
+@router.get("/stock/{symbol}/derivatives")
+def stock_derivatives(symbol: str, days: int = Query(120, ge=5, le=1000)):
+    from . import derivatives as dv
+    eng = db.engine()
+    d = dv.load_daily(eng, [symbol.upper()])
+    if d.empty:
+        return {"symbol": symbol.upper(), "has_fo": False, "series": []}
+    return {"symbol": symbol.upper(), "has_fo": True, "series": records(d.tail(days).drop(columns=["source_id"]))}

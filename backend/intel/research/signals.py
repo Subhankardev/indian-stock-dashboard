@@ -87,6 +87,21 @@ def mf_adds(p: pd.DataFrame) -> pd.Series:
     return _col(p, "b_mf_add")
 
 
+# ---- Phase 3: derivatives positioning (class F) --------------------------------------- #
+def long_buildup(p: pd.DataFrame) -> pd.Series:
+    """Futures long build-up: 5-session price up and total futures OI up ≥5% (outside expiry week)."""
+    return p["liquid"].fillna(False) & (p["f_buildup"] == "long_buildup") if "f_buildup" in p else pd.Series(False, index=p.index)
+
+
+def short_buildup(p: pd.DataFrame) -> pd.Series:
+    return p["liquid"].fillna(False) & (p["f_buildup"] == "short_buildup") if "f_buildup" in p else pd.Series(False, index=p.index)
+
+
+def short_covering(p: pd.DataFrame) -> pd.Series:
+    """Price up while futures OI falls ≥5% — shorts closing; often short-lived."""
+    return p["liquid"].fillna(False) & (p["f_buildup"] == "short_covering") if "f_buildup" in p else pd.Series(False, index=p.index)
+
+
 SIGNALS: dict[str, tuple[Signal, str, str]] = {
     # name: (function, direction, description)
     "rs_leaders": (rs_leaders, "bullish", "Top-10% 6-month relative strength, RS rising"),
@@ -102,10 +117,14 @@ SIGNALS: dict[str, tuple[Signal, str, str]] = {
     "ownership_increase": (ownership_increase, "bullish", "Class B: FPI+DII holding up ≥0.5 pp QoQ (from filing date)"),
     "ownership_decrease": (ownership_decrease, "bearish", "Class B: FPI+DII holding down ≥0.5 pp QoQ (from filing date)"),
     "mf_adds": (mf_adds, "bullish", "Class B: mutual-fund shares up ≥5% MoM (from publication date)"),
+    "long_buildup": (long_buildup, "bullish", "Class F: futures long build-up (price ↑, OI ↑ ≥5% over 5 sessions)"),
+    "short_buildup": (short_buildup, "bearish", "Class F: futures short build-up (price ↓, OI ↑ ≥5% over 5 sessions)"),
+    "short_covering": (short_covering, "bullish", "Class F: short covering (price ↑, OI ↓ ≥5% over 5 sessions)"),
 }
 
 # Evidence class of each signal (docs/DESIGN.md §8); price/RS signals are technical (T).
 EVIDENCE_CLASS = {"rs_leaders": "T", "rs_laggards": "T", "breakout_volume": "T", "breakdown_volume": "T",
                   "near_52w_high_strong": "T", "possible_accumulation": "D", "possible_distribution": "D",
                   "delivery_spike_up": "D", "inst_deal_buy": "A", "inst_deal_sell": "A",
-                  "ownership_increase": "B", "ownership_decrease": "B", "mf_adds": "B"}
+                  "ownership_increase": "B", "ownership_decrease": "B", "mf_adds": "B",
+                  "long_buildup": "F", "short_buildup": "F", "short_covering": "F"}

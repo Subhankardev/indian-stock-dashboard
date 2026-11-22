@@ -94,8 +94,46 @@ def make(n_symbols: int = 60, days: int = 600, seed: int = 11, end: date = date(
                           for d_, m_ in zip(dates.date, mkt) for c, b, n in
                           (("FII", 12000.0, round(m_ * 2e5 + rng.normal(0, 1500), 2)),
                            ("DII", 11000.0, round(-m_ * 1e5 + rng.normal(0, 1200), 2)))])
+    # derivatives: the first ~third of symbols plus NIFTY have F&O; monthly expiries on the last Tuesday
+    expiries = sorted({(m + pd.offsets.LastWeekOfMonth(weekday=1)).date() for m in pd.date_range(dates[0], dates[-1] + pd.Timedelta(days=62), freq="MS")})
+    def near_exp(d_):
+        return next(e for e in expiries if e >= d_)
+    deriv = []
+    fo_syms = syms[: max(n_symbols // 3, 1)]
+    for s_ in fo_syms + ["NIFTY"]:
+        if s_ == "NIFTY":
+            px, kind, lot = idx_close, "index", 75
+        else:
+            px, kind, lot = prices.loc[prices.symbol == s_, "close"].to_numpy(), "stock", 500
+        oi = rng.uniform(2e6, 2e7) * (5 if kind == "index" else 1)
+        r_ = np.diff(np.log(px), prepend=np.log(px[0]))
+        for k, d_ in enumerate(dates.date):
+            oi *= np.exp(rng.normal(0, 0.03) + 2.0 * r_[k] * rng.choice([1, -1], p=[0.6, 0.4]))
+            e = near_exp(d_)
+            dte = (pd.Timestamp(e) - pd.Timestamp(d_)).days
+            ce, pe = oi * rng.uniform(1.5, 3), oi * rng.uniform(1.0, 2.5)
+            deriv.append({"date": d_, "symbol": s_, "kind": kind, "underlying": px[k], "near_expiry": e,
+                          "days_to_expiry": dte, "fut_close": px[k] * (1 + 0.065 * dte / 365),
+                          "fut_oi": round(oi), "fut_oi_change": None, "fut_volume": round(oi * 0.3),
+                          "basis_pct": 6.5 * dte / 365, "rollover_pct": float(np.clip(100 - dte * 3.3, 5, 95)),
+                          "ce_oi": round(ce), "pe_oi": round(pe), "pcr_oi": pe / ce, "ce_volume": None,
+                          "pe_volume": None, "pcr_volume": None,
+                          "max_ce_oi_strike": round(px[k] * 1.05, -1), "max_pe_oi_strike": round(px[k] * 0.95, -1),
+                          "atm_strike": round(px[k], -1), "atm_iv": float(rng.uniform(12, 35)), "lot_size": lot})
+    part = []
+    fii_long = 0.4
+    for d_ in dates.date:
+        fii_long = float(np.clip(fii_long + rng.normal(0, 0.02), 0.1, 0.9))
+        for ct, lp in (("FII", fii_long), ("DII", 0.6), ("Pro", 0.5), ("Client", 1 - fii_long)):
+            tot = 4e5
+            part.append({"date": d_, "client_type": ct, "fut_idx_long": tot * lp, "fut_idx_short": tot * (1 - lp),
+                         "fut_stk_long": 1e6, "fut_stk_short": 1e6, "opt_idx_call_long": 5e5, "opt_idx_put_long": 5e5,
+                         "opt_idx_call_short": 5e5, "opt_idx_put_short": 5e5, "opt_stk_call_long": 1e5,
+                         "opt_stk_put_long": 1e5, "opt_stk_call_short": 1e5, "opt_stk_put_short": 1e5,
+                         "total_long": 3e6, "total_short": 3e6})
     return {"prices": prices, "indices": pd.concat(idx, ignore_index=True), "members": pd.DataFrame(members),
-            "deals": deals, "shareholding": pd.DataFrame(sh), "mf": pd.DataFrame(mf), "fii_dii": flows}
+            "deals": deals, "shareholding": pd.DataFrame(sh), "mf": pd.DataFrame(mf), "fii_dii": flows,
+            "deriv": pd.DataFrame(deriv), "participant_oi": pd.DataFrame(part)}
 
 
 def seed(eng, data: dict | None = None) -> dict:
@@ -117,6 +155,11 @@ def seed(eng, data: dict | None = None) -> dict:
         db.replace_rows(eng, db.mf_holdings, data["mf"].assign(source_id=src), [db.mf_holdings.c.amc.like("DEMO%")])
         db.replace_rows(eng, db.fii_dii_daily, data["fii_dii"].assign(source_id=src),
                         [db.fii_dii_daily.c.date.in_(list(data["fii_dii"]["date"].unique()))])
+    if "deriv" in data:
+        db.replace_rows(eng, db.deriv_daily, data["deriv"].assign(source_id=src),
+                        [db.deriv_daily.c.symbol.in_(list(data["deriv"]["symbol"].unique()))])
+        db.replace_rows(eng, db.participant_oi, data["participant_oi"].assign(source_id=src),
+                        [db.participant_oi.c.date.in_(list(data["participant_oi"]["date"].unique()))])
     return {k: len(v) for k, v in data.items()}
 
 

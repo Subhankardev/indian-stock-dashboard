@@ -4,9 +4,10 @@ import Screener from "./intel/Screener";
 import StockPage from "./intel/StockPage";
 import Research from "./intel/Research";
 import Institutional from "./intel/Institutional";
+import Derivatives from "./intel/Derivatives";
 import "./App.css";
 
-const TABS = [["overview", "Overview"], ["screener", "Screener"], ["institutional", "Institutional"], ["stock", "Stock"], ["research", "Research"]];
+const TABS = [["overview", "Overview"], ["screener", "Screener"], ["institutional", "Institutional"], ["derivatives", "Derivatives"], ["stock", "Stock"], ["research", "Research"]];
 
 function App() {
   const [tab, setTab] = useState("screener");
@@ -29,6 +30,7 @@ function App() {
         {tab === "screener" && <Screener onOpen={open} />}
         {tab === "stock" && symbol && <StockPage symbol={symbol} />}
         {tab === "institutional" && <Institutional onOpen={open} />}
+        {tab === "derivatives" && <Derivatives onOpen={open} />}
         {tab === "research" && <Research />}
         <p className="disclaimer">Research tool, not investment advice. Signals are tested on history before use; no trades are placed.</p>
       </main>
