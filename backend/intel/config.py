@@ -56,6 +56,7 @@ DEFAULTS: dict = {
     "nse": {"min_interval_s": 0.5, "timeout_s": 30, "retries": 3,
             # F&O option rows are ~50-100k a day; only per-underlying summaries are kept unless True
             "store_option_rows": False},
+    "orderflow": {"enabled": False, "provider": None},
     "derivatives": {"risk_free_rate": 0.065, "oi_change_window": 5, "min_oi_change_pct": 5.0,
                     "expiry_blackout_sessions": 3},
 }

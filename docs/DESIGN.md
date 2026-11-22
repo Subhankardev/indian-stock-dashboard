@@ -231,7 +231,7 @@ agreement(i,t) = share of available factors with p_f > 60
 | 1 | Data store + NSE ingestion (CM+delivery, indices, index lists), universe & liquidity filters, indicators, relative strength, **research framework (event study + walk-forward)**, basic dashboard | Pipeline runs on real data on the owner's Mac; RS/momentum signals tested — **built** |
 | 2 | Delivery analytics, bulk/block deals + entity classification, FII/DII store, shareholding, MF portfolios, evidence classes, accumulation/distribution detection | Each signal tested; evidence shown with classes — **built** (shareholding/MF via CSV import; per-AMC adapters and XBRL parsing remain manual) |
 | 3 | F&O bhavcopy, OI build-up classes, basis, PCR, IV, strike OI, participant OI | Tested; market-wide vs stock-specific separated — **built** |
-| 4 | VWAP / anchored VWAP on daily data; tick-based order flow behind a feature flag (needs paid data) | Disabled features explain what data they need |
+| 4 | VWAP / anchored VWAP on daily data; tick-based order flow behind a feature flag (needs paid data) | Disabled features explain what data they need — **built** |
 | 5 | Fundamentals from filings / CSV import, sector-aware quality & valuation | Tested as a filter |
 | 6 | Scoring engine with confidence, agreement, conflicts; ranked lists & special alerts | Only passed factors weighted |
 | 7 | Trade setups, ATR stops, sizing, exposure limits, costs, paper trading, alerts | Paper-trade log |

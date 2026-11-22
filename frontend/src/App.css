@@ -410,3 +410,11 @@ ul.subs li.on .dot-ind { color: var(--amber); }
 ul.evidence li { padding: 4px 0; }
 .section-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 8px 0 6px; }
 .cls-F { background: #ffe4e6; color: #9f1239; }
+.intraday { display: grid; grid-template-columns: 3fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .intraday { grid-template-columns: 1fr; } }
+.profile { display: flex; flex-direction: column; gap: 1px; }
+.prow { display: flex; align-items: center; height: 5px; }
+.plabel { width: 56px; font-size: 10px; color: var(--muted); text-align: right; padding-right: 4px; line-height: 5px; overflow: visible; white-space: nowrap; }
+.pbar { height: 4px; background: #cbd5e1; border-radius: 1px; }
+.pbar.va { background: #93c5fd; }
+.pbar.poc { background: #2563eb; }
