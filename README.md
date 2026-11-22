@@ -16,8 +16,9 @@ Design, data sources, schema, methodology and roadmap: **[docs/DESIGN.md](docs/D
 | 3 | F&O: futures build-ups (class F), basis, rollover, PCR, max-OI strikes, ATM IV, participant OI; Derivatives page | done |
 | 4 | Daily VWAP + anchored VWAPs, absorption proxy, intraday VWAP bands + volume profile (Upstox 1-min), order-flow features behind a flag | done |
 | 5 | Point-in-time fundamentals (CSV import), sector-aware quality & valuation scores, market cap, fundamentals tested as a filter | done |
-| 6 | Scoring engine, market regime & sectors, ranked lists, special alerts | next |
-| 7–9 | Fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
+| 6 | Multi-factor scoring (tested factors only, confidence, agreement, conflicts), market regime, breadth, sector strength, Rankings page, special situations | done |
+| 7 | Trade setups, sizing, costs, paper trading, alerts | next |
+| 8–9 | Fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
 
 ## Quick start (on your Mac)
 
@@ -142,8 +143,25 @@ python -m intel.imports fundamentals fundamentals.csv   # symbol,period_end,peri
   - Quality and value are percentiles **within the industry** when it has ≥5 stocks with data; otherwise they are ranked against the whole universe, and the page says so.
 - **Tested as a filter**: `rs_leaders_quality` and `breakout_volume_quality` are the base signals restricted to quality ≥60. The Research page compares each with its base.
 
+## Scoring (Phase 6)
+
+Nine factors are cross-sectional percentiles among liquid stocks on each date: accumulation, relative strength, momentum, volume and delivery, derivatives, fundamentals, valuation, sector, and risk.
+
+```
+score      = Σ w·p·c / Σ w·c         over ACTIVE factors      (c = 1 data, 0.5 stale, 0 missing)
+confidence = Σ w·c / Σ w             over ACTIVE factors
+agreement  = share of available factors with p > 60
+```
+
+- A factor is **active only after its own test passes**. `factor_<name>` is the event study of stocks entering that factor's top quintile, and runs with `python -m intel.research`. Until something passes, the Rankings page shows nothing. **Unvalidated preview** switches every factor on and is clearly bannered.
+- Rankings require confidence ≥ `scoring.min_confidence` (0.6). Weights are in `scoring.weights`.
+- **Conflicts** are flagged per stock rather than averaged away. Examples: strong accumulation and distribution evidence together, strong RS with distribution clues, accumulation during a futures short build-up.
+- **Special situations** are combinations listed for a look, such as accumulation clues on a breakout, or institutional buying above the 52W-high AVWAP. They are not recommendations.
+- **Market** (Overview): the regime (index vs 200-DMA, 50-DMA slope, breadth), % above 50/200-DMA, advancers/decliners, new highs/lows, and sector RS ranking with its 20-day change.
+
 ## Pages
 
+- **Rankings**: bullish and bearish lists with score, confidence, agreement, a factor heat-map, conflicts and special situations.
 - **Screener**: the latest session for every liquid stock, sortable by RS rank, relative strength over 3/6 months, RS momentum, RVOL, delivery % and its 20-day average, RSI, ADX, distance from the 52-week high and average traded value. Filter by industry.
 - **Stock**: price with EMA 20 / 50 DMA / 200 DMA, volume, the RS line vs Nifty 50, daily delivery %, the accumulation/distribution evidence with classes, shareholding and deals, and the file the latest row came from. With an Upstox token, also the option chain.
 - **Institutional**: FII/DII flows (class C), stocks with the most accumulation/distribution evidence, and recent bulk/block deals with entity classes.
@@ -187,6 +205,8 @@ backend/intel/
   intraday.py       1-minute VWAP bands and volume profile
   orderflow.py      tick/order-book features (feature-flagged, explain what they need)
   fundamentals.py   point-in-time fundamentals, sector-relative quality/value
+  market.py         regime, breadth, sector strength
+  scoring.py        factor percentiles, gated scores, confidence, conflicts, rankings
   panel.py          universe + liquidity filters + indicators per stock/date
   research/         event study, signals, walk-forward, CLI
   api.py            /api/intel/* endpoints

@@ -5,9 +5,10 @@ import StockPage from "./intel/StockPage";
 import Research from "./intel/Research";
 import Institutional from "./intel/Institutional";
 import Derivatives from "./intel/Derivatives";
+import Rankings from "./intel/Rankings";
 import "./App.css";
 
-const TABS = [["overview", "Overview"], ["screener", "Screener"], ["institutional", "Institutional"], ["derivatives", "Derivatives"], ["stock", "Stock"], ["research", "Research"]];
+const TABS = [["overview", "Overview"], ["rankings", "Rankings"], ["screener", "Screener"], ["institutional", "Institutional"], ["derivatives", "Derivatives"], ["stock", "Stock"], ["research", "Research"]];
 
 function App() {
   const [tab, setTab] = useState("screener");
@@ -26,10 +27,11 @@ function App() {
         </form>
       </header>
       <main className="page">
-        {tab === "overview" && <Overview />}
+        {tab === "overview" && <Overview onOpen={open} />}
         {tab === "screener" && <Screener onOpen={open} />}
         {tab === "stock" && symbol && <StockPage symbol={symbol} onOpen={open} />}
         {tab === "institutional" && <Institutional onOpen={open} />}
+        {tab === "rankings" && <Rankings onOpen={open} />}
         {tab === "derivatives" && <Derivatives onOpen={open} />}
         {tab === "research" && <Research />}
         <p className="disclaimer">Research tool, not investment advice. Signals are tested on history before use; no trades are placed.</p>

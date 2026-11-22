@@ -420,3 +420,7 @@ ul.evidence li { padding: 4px 0; }
 .pbar.poc { background: #2563eb; }
 .cls-Q { background: #ccfbf1; color: #115e59; }
 .grid-table tr.self { background: var(--primary-soft); }
+.inactive { opacity: .45; }
+th.inactive { text-decoration: line-through; }
+.factor-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.cls-S { background: #fae8ff; color: #86198f; }
