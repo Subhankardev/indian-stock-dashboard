@@ -78,6 +78,7 @@ export const CLASS_INFO = {
   F: "F · derivatives positioning (futures price/OI build-ups) — not who traded",
   T: "T · technical / relative-strength signal",
   Q: "Q · fundamentals filter (point-in-time, sector-relative)",
+  S: "S · scoring-factor test (top quintile of a factor)",
 };
 
 export function ClassTag({ c }) {

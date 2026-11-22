@@ -6,6 +6,7 @@ import EvidencePanel from "./EvidencePanel";
 import FuturesPanel from "./FuturesPanel";
 import VwapPanel from "./VwapPanel";
 import FundamentalsPanel from "./FundamentalsPanel";
+import ScorePanel from "./ScorePanel";
 
 const RANGES = [["3M", 63], ["6M", 126], ["1Y", 250], ["2Y", 500]];
 
@@ -50,6 +51,7 @@ export default function StockPage({ symbol, onOpen }) {
             hint={L.liquid ? "Passes liquidity filters" : "Fails at least one liquidity filter"} />
         </div>
       </div>
+      <ScorePanel symbol={symbol} />
       <div className="panel">
         <div className="panel-head"><h3>Price & moving averages</h3>
           <Legend items={[{ label: "Close", color: "var(--text)" }, { label: "EMA 20", color: "#8b5cf6" },

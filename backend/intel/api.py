@@ -66,7 +66,8 @@ def panel_cached(eng) -> pd.DataFrame:
     key = (str(eng.url),) + _state_key(eng)
     if _cache.get("key") != key:
         _cache.clear()
-        _cache.update(key=key, panel=evidence.attach(eng, build_panel(eng, load())))
+        from .scoring import enrich
+        _cache.update(key=key, panel=enrich(eng, build_panel(eng, load())))
     return _cache["panel"]
 
 
@@ -402,3 +403,67 @@ async def stock_fundamentals(symbol: str):
             "sources": _sources_for(eng, ["fundamentals_import", "demo"]),
             "note": "Point-in-time: each number is used only from its publication date. Financials skip leverage, "
                     "EBITDA margin and cash conversion; asset quality (GNPA) is used when present."}
+
+
+# ------------------------------------------------------------- Phase 6 --- #
+@router.get("/rankings")
+async def rankings_view(preview: bool = False, limit: int = Query(30, ge=1, le=200)):
+    """Bullish and bearish rankings from active (tested) factors, with confidence, agreement,
+    conflicts and special situations. ``preview=true`` uses every factor — UNVALIDATED."""
+    from . import scoring
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    if panel.empty:
+        return {"demo": _is_demo(eng), "bullish": [], "bearish": [], "message": "No price data."}
+    res = scoring.rankings(eng, panel, preview=preview, limit=limit)
+    res["demo"] = _is_demo(eng)
+    return res
+
+
+@router.get("/market")
+async def market_view():
+    """Market regime, breadth, sector strength and flows (all market-wide, class C)."""
+    from . import market
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    if panel.empty:
+        return {"demo": _is_demo(eng), "regime": None, "breadth": [], "sectors": []}
+    br = market.breadth(panel, days=250)
+    last = panel["date"].max()
+    today = panel[panel["date"] == last]
+    counts = {k: int(today[k].fillna(False).astype(bool).sum()) for k in
+              ("a_inst_buy", "a_inst_sell", "b_inst_up", "b_inst_down") if k in today}
+    if "d_score" in today:
+        counts["possible_accumulation"] = int((today["d_score"] >= 3).sum())
+        counts["possible_distribution"] = int((today["x_score"] >= 3).sum())
+    flows = evidence.market_flows(eng, days=1)
+    return {"demo": _is_demo(eng), "regime": market.regime(eng, panel), "breadth": records(br),
+            "sectors": records(market.sector_table(panel)), "signal_counts": counts,
+            "flows": records(flows), "as_of": _clean(last)}
+
+
+@router.get("/stock/{symbol}/score")
+async def stock_score(symbol: str, preview: bool = False):
+    """Score breakdown for one stock: each factor's percentile, weight, coverage and status."""
+    from . import scoring
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    sym = symbol.upper()
+    g = panel[panel["symbol"] == sym] if not panel.empty else panel
+    if g.empty:
+        raise HTTPException(404, f"No data for {sym}")
+    cfg = load()
+    active = set(scoring.FACTORS) if preview else scoring.active_factors(eng)
+    row = g.iloc[[-1]]
+    weights = cfg["scoring"]["weights"]
+    sides = {side: {k: _clean(v) for k, v in scoring.score(row, active, weights, side).iloc[0].items()}
+             for side in ("bullish", "bearish")}
+    r = row.iloc[0]
+    factors = [{"factor": f, "description": d, "weight": weights.get(k, 0), "active": f in active,
+                "bullish_pct": _clean(r.get(f"p_{f}")), "bearish_pct": _clean(r.get(f"q_{f}")),
+                "coverage": _clean(r.get(f"c_{f}"))} for f, (k, d) in scoring.FACTORS.items()]
+    history = scoring.score(g.tail(250), active, weights, "bullish").join(g.tail(250)[["date"]])
+    return {"symbol": sym, "as_of": _clean(r["date"]), "preview": preview, "active": sorted(active),
+            "liquid": bool(r.get("liquid")), "min_confidence": cfg["scoring"]["min_confidence"],
+            "scores": sides, "factors": factors, "conflicts": scoring.conflicts(r),
+            "history": records(history[["date", "bullish_score", "bullish_confidence"]])}

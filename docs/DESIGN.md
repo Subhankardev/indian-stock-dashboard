@@ -233,7 +233,7 @@ agreement(i,t) = share of available factors with p_f > 60
 | 3 | F&O bhavcopy, OI build-up classes, basis, PCR, IV, strike OI, participant OI | Tested; market-wide vs stock-specific separated — **built** |
 | 4 | VWAP / anchored VWAP on daily data; tick-based order flow behind a feature flag (needs paid data) | Disabled features explain what data they need — **built** |
 | 5 | Fundamentals from filings / CSV import, sector-aware quality & valuation | Tested as a filter — **built** |
-| 6 | Scoring engine with confidence, agreement, conflicts; ranked lists & special alerts | Only passed factors weighted |
+| 6 | Scoring engine with confidence, agreement, conflicts; ranked lists & special alerts | Only passed factors weighted — **built** |
 | 7 | Trade setups, ATR stops, sizing, exposure limits, costs, paper trading, alerts | Paper-trade log |
 | 8 | Full portfolio backtests, walk-forward reports, sensitivity | Report vs Nifty 50/500 |
 | 9 | Research assistant grounded in the database | Answers cite stored data and evidence classes |

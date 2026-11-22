@@ -147,6 +147,17 @@ def quality_value(p: pd.DataFrame) -> pd.Series:
             & (p["value_score"].astype(float) >= 70))
 
 
+# ---- Phase 6: factor tests (a factor is active in the score only if its test passes) -------- #
+def _factor_top(name: str, prefix: str = "p_"):
+    def fn(p: pd.DataFrame) -> pd.Series:
+        col = f"{prefix}{name}"
+        if col not in p:
+            return pd.Series(False, index=p.index)
+        return p["liquid"].fillna(False) & (p[col].astype(float) >= 80)
+    fn.__doc__ = f"Top quintile of the {name} factor (entering it)"
+    return fn
+
+
 SIGNALS: dict[str, tuple[Signal, str, str]] = {
     # name: (function, direction, description)
     "rs_leaders": (rs_leaders, "bullish", "Top-10% 6-month relative strength, RS rising"),
@@ -174,6 +185,11 @@ SIGNALS: dict[str, tuple[Signal, str, str]] = {
     "quality_value": (quality_value, "bullish", "Top-30% quality and value within its sector"),
 }
 
+FACTOR_NAMES = ["accumulation", "relative_strength", "momentum", "volume_delivery", "derivatives",
+                "fundamentals", "valuation", "sector", "risk"]
+for _f in FACTOR_NAMES:
+    SIGNALS[f"factor_{_f}"] = (_factor_top(_f), "bullish", f"Factor test: entering the top quintile of {_f}")
+
 # For each filtered signal, the unfiltered base it should be compared with.
 FILTER_BASE = {"rs_leaders_quality": "rs_leaders", "breakout_volume_quality": "breakout_volume"}
 
@@ -185,3 +201,4 @@ EVIDENCE_CLASS = {"rs_leaders": "T", "rs_laggards": "T", "breakout_volume": "T",
                   "long_buildup": "F", "short_buildup": "F", "short_covering": "F",
                   "avwap_reclaim": "T", "avwap_loss": "T", "absorption_up": "D", "above_avwap_52w_high": "T",
                   "rs_leaders_quality": "Q", "breakout_volume_quality": "Q", "quality_value": "Q"}
+EVIDENCE_CLASS.update({f"factor_{f}": "S" for f in FACTOR_NAMES})
