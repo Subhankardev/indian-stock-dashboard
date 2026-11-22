@@ -195,6 +195,16 @@ signal_tests = Table(
     Column("passed", Integer),
 )
 
+intel_alerts = Table(
+    "intel_alerts", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("created", DateTime), Column("date", Date),
+    Column("kind", String(30)), Column("symbol", String(40)), Column("direction", String(8)),
+    Column("title", Text), Column("detail", Text), Column("data", Text),   # JSON
+    Column("sent", Integer),                                               # 1 = delivered to Telegram
+    UniqueConstraint("date", "kind", "symbol", "title", name="uq_intel_alert"),
+)
+
 paper_trades = Table(
     "paper_trades", meta,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -203,6 +213,8 @@ paper_trades = Table(
     Column("target1", Float), Column("target2", Float), Column("target3", Float),
     Column("qty", Float), Column("status", String(12)), Column("closed", Date),
     Column("exit_price", Float), Column("costs", Float), Column("pnl", Float), Column("notes", Text),
+    Column("trigger", Float), Column("filled", Date), Column("exit_reason", String(20)),
+    Column("r_multiple", Float), Column("industry", String(80)), Column("created", DateTime),
 )
 
 _engines: dict[str, Engine] = {}
@@ -221,8 +233,28 @@ def engine(url: Optional[str] = None) -> Engine:
                 os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         eng = create_engine(url, future=True)
         meta.create_all(eng)
+        add_missing_columns(eng)
         _engines[url] = eng
     return _engines[url]
+
+
+def add_missing_columns(eng: Engine) -> list[str]:
+    """Tiny forward-only migration: add columns that later phases added to existing tables
+    (all such columns are nullable). Returns what was added."""
+    from sqlalchemy import inspect, text
+    added = []
+    insp = inspect(eng)
+    for table in meta.sorted_tables:
+        if not insp.has_table(table.name):
+            continue
+        have = {c["name"] for c in insp.get_columns(table.name)}
+        for col in table.columns:
+            if col.name not in have:
+                ddl = f'ALTER TABLE {table.name} ADD COLUMN {col.name} {col.type.compile(eng.dialect)}'
+                with eng.begin() as c:
+                    c.execute(text(ddl))
+                added.append(f"{table.name}.{col.name}")
+    return added
 
 
 def reset_engines() -> None:

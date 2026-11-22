@@ -57,6 +57,18 @@ DEFAULTS: dict = {
             # F&O option rows are ~50-100k a day; only per-underlying summaries are kept unless True
             "store_option_rows": False},
     "orderflow": {"enabled": False, "provider": None},
+    # Phase 7 — paper trading only; nothing here ever places a real order
+    "trading": {"capital": 1000000, "risk_per_trade_pct": 0.5, "atr_mult": 2.0, "swing_lookback": 10,
+                "entry": "breakout", "targets_r": [1.5, 3.0], "exit_target_index": 1, "time_exit_sessions": 20,
+                "pending_expiry_sessions": 3,
+                "max_position_pct": 10, "max_adv_pct": 1.0, "max_open_positions": 10,
+                "max_sector_pct": 30, "max_total_exposure_pct": 100, "auto_top_n": 5},
+    # equity delivery charges (verify with your broker); percentages are of turnover
+    "costs": {"brokerage_per_order": 20.0, "brokerage_pct": 0.0, "stt_pct": 0.1, "exchange_pct": 0.00297,
+              "sebi_per_crore": 10.0, "stamp_pct": 0.015, "gst_pct": 18.0, "dp_per_sell": 15.93,
+              "slippage_bps": 5.0},
+    "alerts": {"kinds": ["special", "ranking_entry", "paper_open", "paper_fill", "paper_exit", "stale_data"],
+               "top_n": 10, "stale_days": 4},
     "fundamentals": {"min_peers": 5, "max_age_days": 270, "quality_filter_min": 60},
     "derivatives": {"risk_free_rate": 0.065, "oi_change_window": 5, "min_oi_change_pct": 5.0,
                     "expiry_blackout_sessions": 3},

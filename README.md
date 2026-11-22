@@ -17,8 +17,9 @@ Design, data sources, schema, methodology and roadmap: **[docs/DESIGN.md](docs/D
 | 4 | Daily VWAP + anchored VWAPs, absorption proxy, intraday VWAP bands + volume profile (Upstox 1-min), order-flow features behind a flag | done |
 | 5 | Point-in-time fundamentals (CSV import), sector-aware quality & valuation scores, market cap, fundamentals tested as a filter | done |
 | 6 | Multi-factor scoring (tested factors only, confidence, agreement, conflicts), market regime, breadth, sector strength, Rankings page, special situations | done |
-| 7 | Trade setups, sizing, costs, paper trading, alerts | next |
-| 8–9 | Portfolio backtests + walk-forward reports, research assistant | planned |
+| 7 | Trade setups (ATR/swing stops, R targets), sizing, Indian delivery cost model, exposure limits, paper trading, alerts (+ Telegram), daily job | done |
+| 8 | Portfolio backtests, walk-forward reports, sensitivity | next |
+| 9 | Research assistant grounded in the database | planned |
 
 ## Quick start (on your Mac)
 
@@ -36,10 +37,10 @@ Download index lists and daily cash-market + index files since 2023 (about 1,000
 python -m intel.ingest --lists --from 2023-01-01
 ```
 
-After that, once a day after about 18:30 IST:
+After that, once a day after about 18:30 IST, run the daily job (download → paper-trade update → alerts):
 
 ```bash
-python -m intel.ingest --days 5 --today
+python -m intel.daily
 ```
 
 Other datasets: `--datasets cm,indices,fo,participant_oi`. A 404 for a weekday is recorded as a holiday; a malformed file is recorded as an error with the reason (see the Overview page).
@@ -159,13 +160,43 @@ agreement  = share of available factors with p > 60
 - **Special situations** are combinations listed for a look, such as accumulation clues on a breakout, or institutional buying above the 52W-high AVWAP. They are not recommendations.
 - **Market** (Overview): the regime (index vs 200-DMA, 50-DMA slope, breadth), % above 50/200-DMA, advancers/decliners, new highs/lows, and sector RS ranking with its 20-day change.
 
+## Trade setups, paper trading and alerts (Phase 7)
+
+> Nothing in this system places a real order. Setups are for research and paper trading only.
+
+- **Setup**:
+  - The trigger is the day's high (breakout entry: it must trade through next session) or the close (entry at the next open).
+  - The stop is the tighter of `trigger − 2·ATR14` and the 10-session swing low.
+  - Targets are at 1.5R and 3R.
+- **Sizing**: 0.5% of capital at risk, capped at 10% of capital per position and at 1% of the 20-day average volume. The UI says which of these limits set the quantity.
+- **Costs** use an equity delivery model:
+  - brokerage, STT 0.1% on both sides, exchange charges, SEBI fee
+  - stamp duty of 0.015% on the buy, GST, the DP charge on the sell, and slippage
+
+  Defaults are in `costs`; verify them with your broker.
+- **Exposure limits**: at most 10 open positions, 30% of capital per sector, 100% in total, and one position per stock.
+- **Paper trading** (`python -m intel.paper --update | --auto | --report`) is conservative:
+  - Breakout entries fill only on a trade through the trigger, and a gap fills at the open.
+  - If one bar touches both stop and target, the stop counts first.
+  - Gap-through stops exit at the open, and trades time out after 20 sessions.
+  - P&L is after costs, with R-multiples, win rate, expectancy and drawdown.
+  - `--auto` opens the top-ranked names only when factors have passed their tests.
+- **Alerts** go to the `intel_alerts` table and, when `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` are set, to Telegram:
+  - special situations, and new entrants to the top 10 (tested factors only)
+  - paper set, fill and exit
+  - stale data
+
+  Duplicates are suppressed, and each alert is sent once.
+
 ## Pages
 
 - **Rankings**: bullish and bearish lists with score, confidence, agreement, a factor heat-map, conflicts and special situations.
 - **Screener**: the latest session for every liquid stock, sortable by RS rank, relative strength over 3/6 months, RS momentum, RVOL, delivery % and its 20-day average, RSI, ADX, distance from the 52-week high and average traded value. Filter by industry.
-- **Stock**: price with EMA 20 / 50 DMA / 200 DMA, volume, the RS line vs Nifty 50, daily delivery %, the accumulation/distribution evidence with classes, shareholding and deals, and the file the latest row came from. With an Upstox token, also the option chain.
+- **Stock**: score breakdown, trade setup with a paper-trade button, price with EMA 20 / 50 DMA / 200 DMA, volume, the RS line vs Nifty 50, daily delivery %, the accumulation/distribution evidence with classes, shareholding and deals, and the file the latest row came from. With an Upstox token, also the option chain.
 - **Institutional**: FII/DII flows (class C), stocks with the most accumulation/distribution evidence, and recent bulk/block deals with entity classes.
 - **Derivatives**: participant index-futures positioning, NIFTY PCR and IV, and today's stock futures build-ups.
+- **Paper**: the paper-trade log, P&L after costs, equity curve, and process/auto buttons.
+- **Alerts**: the alert feed, Telegram status and test.
 - **Research**: each signal's event study, giving events, hit rate, 20-day excess return after costs, 95% range, sub-period results and a PASS/fail verdict with the reason.
 - **Overview**: data freshness per dataset (flags stale data), recent download errors, the source registry, and the active configuration.
 
@@ -207,6 +238,10 @@ backend/intel/
   fundamentals.py   point-in-time fundamentals, sector-relative quality/value
   market.py         regime, breadth, sector strength
   scoring.py        factor percentiles, gated scores, confidence, conflicts, rankings
+  setups.py         trade setups, sizing, cost model, exposure limits
+  paper.py          paper-trading engine
+  alerts.py         alert generation + Telegram delivery
+  daily.py          the daily job
   panel.py          universe + liquidity filters + indicators per stock/date
   research/         event study, signals, walk-forward, CLI
   api.py            /api/intel/* endpoints
