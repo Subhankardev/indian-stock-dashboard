@@ -4,6 +4,7 @@
     python -m intel.upstox_ingest --days 10                     # daily top-up (also run by intel.daily)
     python -m intel.upstox_ingest --from 2023-01-01 --fo-only   # only the ~200 F&O stocks (fast)
     python -m intel.upstox_ingest --symbols RELIANCE,TCS --from 2024-01-01
+    python -m intel.upstox_ingest --futures-only --from 2023-01-01   # retry only incomplete futures history
 
 Needs ``UPSTOX_ACCESS_TOKEN`` in backend/.env (one-click login: /api/upstox/login).
 
@@ -193,8 +194,22 @@ def deriv_rows(symbol: str, kind: str, spot: pd.Series, contracts: list[tuple[da
     return pd.DataFrame(rows)
 
 
-def load_futures(eng, client, start: date, end: date, symbols=None, max_expired: int = 40) -> dict:
-    """Futures OI history for F&O stocks and NIFTY/BANKNIFTY into deriv_daily (keeps option fields)."""
+def _has_history(eng, sym: str, start: date) -> bool:
+    """True if deriv_daily already reaches back to within ~45 days of ``start`` for this underlying."""
+    from sqlalchemy import func
+    t = db.deriv_daily
+    with eng.connect() as c:
+        first = c.execute(select(func.min(t.c.date)).where(t.c.symbol == sym, t.c.fut_oi.isnot(None))).scalar()
+    return first is not None and first <= start + timedelta(days=45)
+
+
+def load_futures(eng, client, start: date, end: date, symbols=None, max_expired: int = 40,
+                 missing_only: bool = False) -> dict:
+    """Futures OI history for F&O stocks and NIFTY/BANKNIFTY into deriv_daily (keeps option fields).
+
+    Expired contracts come from a stricter-rate-limited Upstox endpoint: calls are spaced and
+    retried with long backoff, and if they still fail the stock keeps its live-contract OI and is
+    reported as *partial*, so a later ``--futures-only`` run fills just the gaps."""
     from app.upstox_data import find_futures
     ins = client.instruments()
     unders = sorted({str(i.get("underlying_symbol", "")).upper() for i in ins
@@ -203,11 +218,14 @@ def load_futures(eng, client, start: date, end: date, symbols=None, max_expired:
         unders = [u for u in unders if u in {s.upper() for s in symbols}]
     eq_keys = {str(i["trading_symbol"]).upper(): i["instrument_key"] for i in equities(ins)}
     src = _start_source(eng, "upstox_fo", f"upstox://futures candles + expired contracts ({start}..{end})")
-    done, errors, latest = 0, [], None
+    done, errors, partial, skipped, latest = 0, [], [], 0, None
     for sym in unders:
         kind = "index" if sym in FO_INDEX else "stock"
         under_key = FO_INDEX.get(sym) or eq_keys.get(sym)
         if not under_key:
+            continue
+        if missing_only and _has_history(eng, sym, start):
+            skipped += 1
             continue
         try:
             spot = client.daily_candles(under_key, start, end, include_today=False)["close"]
@@ -215,11 +233,14 @@ def load_futures(eng, client, start: date, end: date, symbols=None, max_expired:
                           else pd.Timestamp(f["expiry"]).date(),
                           client.daily_candles(f["instrument_key"], start, end, include_today=False))
                          for f in find_futures(ins, sym)]
-            if client.token and start < end - timedelta(days=95):
-                contracts += _expired(client, under_key, start, max_expired)
         except Exception as exc:
-            errors.append(f"{sym}: {exc}")
+            errors.append(f"{sym}: {_short(exc)}")
             continue
+        if client.token and start < end - timedelta(days=95):
+            try:
+                contracts += _expired(client, under_key, start, max_expired)
+            except Exception as exc:          # keep the live contracts; fill history on a later run
+                partial.append(f"{sym}: {_short(exc)}")
         rows = deriv_rows(sym, kind, spot, contracts)
         if rows.empty:
             continue
@@ -228,23 +249,53 @@ def load_futures(eng, client, start: date, end: date, symbols=None, max_expired:
         done += 1
         latest = max(latest or rows["date"].max(), rows["date"].max())
     _finalize_source(eng, src, "upstox_fo", latest or end, done, "ok" if done or not errors else "error",
-                     "; ".join(errors[:5]) or None)
-    return {"underlyings": done, "errors": len(errors), "first_errors": errors[:5]}
+                     "; ".join((errors + partial)[:5]) or None)
+    out = {"underlyings": done, "errors": len(errors), "partial_history": len(partial),
+           "first_errors": (errors + partial)[:3]}
+    if missing_only:
+        out["already_complete"] = skipped
+    if partial:
+        out["next"] = "python -m intel.upstox_ingest --futures-only --from %s   (fills the missing history)" % start
+    return out
+
+
+def _short(exc: Exception) -> str:
+    m = str(exc)
+    if "429" in m:
+        return "Upstox rate limit (HTTP 429)"
+    return m[:160]
+
+
+def _slow_get(client, path: str, params: Optional[dict] = None) -> dict:
+    """Upstox expired-instrument endpoints rate-limit hard: space calls and back off long on 429."""
+    import os
+    gap = float(os.getenv("UPSTOX_EXPIRED_INTERVAL", "0.35"))
+    for wait in (0, 5, 15, 30, 60):
+        if wait:
+            time.sleep(wait)
+        time.sleep(gap)
+        try:
+            return client._get(path, params)
+        except Exception as exc:
+            if "429" not in str(exc):
+                raise
+            last = exc
+    raise last
 
 
 def _expired(client, under_key: str, start: date, max_contracts: int) -> list:
     from urllib.parse import quote
     from app.upstox_data import parse_candles
-    expiries = client._get("/v2/expired-instruments/expiries", {"instrument_key": under_key}).get("data") or []
+    expiries = _slow_get(client, "/v2/expired-instruments/expiries", {"instrument_key": under_key}).get("data") or []
     expiries = sorted((e for e in expiries if e >= f"{start:%Y-%m-%d}"), reverse=True)[:max_contracts]
     out = []
     for exp in expiries:
-        for ct in client._get("/v2/expired-instruments/future/contract",
-                              {"instrument_key": under_key, "expiry_date": exp}).get("data") or []:
+        for ct in _slow_get(client, "/v2/expired-instruments/future/contract",
+                            {"instrument_key": under_key, "expiry_date": exp}).get("data") or []:
             ek = quote(ct["instrument_key"], safe="")
             d = date.fromisoformat(exp)
             frm = max(start, d - timedelta(days=100))
-            body = client._get(f"/v2/expired-instruments/historical-candle/{ek}/day/{d:%Y-%m-%d}/{frm:%Y-%m-%d}")
+            body = _slow_get(client, f"/v2/expired-instruments/historical-candle/{ek}/day/{d:%Y-%m-%d}/{frm:%Y-%m-%d}")
             out.append((d, parse_candles(body.get("data", {}).get("candles", []))))
     return out
 
@@ -313,6 +364,8 @@ def main(argv=None) -> int:
     ap.add_argument("--fo-only", action="store_true", help="only stocks with futures (~200)")
     ap.add_argument("--symbols", help="comma list, e.g. RELIANCE,TCS")
     ap.add_argument("--no-futures", action="store_true")
+    ap.add_argument("--futures-only", action="store_true",
+                    help="only futures OI; skips underlyings whose history is already complete (unless --force)")
     ap.add_argument("--options", action="store_true", help="store today's NIFTY/BANKNIFTY option-chain summary")
     ap.add_argument("--force", action="store_true", help="re-load dates already stored from Upstox")
     a = ap.parse_args(argv)
@@ -331,11 +384,14 @@ def main(argv=None) -> int:
         sys.stdout.write(f"\r  {n}/{total} {sym:<15} ({time.time() - t0:.0f}s)   ")
         sys.stdout.flush()
 
-    print(f"Indices: {load_indices(eng, client, start, end)}")
-    print(f"Equities {start} → {end}…")
-    print("\n", load_equities(eng, client, start, end, a.fo_only, syms, a.force, progress))
+    if not a.futures_only:
+        print(f"Indices: {load_indices(eng, client, start, end)}")
+        print(f"Equities {start} → {end}…")
+        print("\n", load_equities(eng, client, start, end, a.fo_only, syms, a.force, progress))
     if not a.no_futures:
-        print("Futures OI:", load_futures(eng, client, start, end, syms))
+        print("Futures OI (expired contracts are slow: Upstox rate-limits them)…")
+        print("Futures OI:", load_futures(eng, client, start, end, syms,
+                                          missing_only=a.futures_only and not a.force))
     if a.options:
         print("Options today:", load_options_today(eng, client))
     w = survivorship_warning(eng)

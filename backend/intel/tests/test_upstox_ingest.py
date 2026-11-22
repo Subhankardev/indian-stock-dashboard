@@ -131,3 +131,34 @@ def test_cli_tools_read_backend_env(tmp_path, monkeypatch):
     import os
     assert os.environ.get("UPSTOX_ACCESS_TOKEN") == "abc.def.ghi"
     monkeypatch.setenv("APP_SKIP_DOTENV", "1")
+
+
+def test_rate_limited_history_keeps_live_contracts_and_retry_fills_gaps(monkeypatch):
+    monkeypatch.setattr(ui.time, "sleep", lambda s: None)
+    eng = db.engine()
+
+    class Limited(FakeUpstox):
+        def _get(self, path, params=None):
+            raise RuntimeError("Upstox /v2/expired-instruments/expiries -> HTTP 429: Too Many Request Sent")
+
+    s, e = date(2024, 1, 1), date(2024, 12, 31)
+    res = ui.load_futures(eng, Limited(), s, e)
+    assert res["underlyings"] == 1 and res["errors"] == 0 and res["partial_history"] == 1
+    assert "rate limit" in res["first_errors"][0] and "--futures-only" in res["next"]
+    assert len(db.read_sql(eng, select(db.deriv_daily))) > 0, "live-contract OI kept"
+    # live contract covered the whole year here, so a --futures-only rerun has nothing to fill
+    again = ui.load_futures(eng, FakeUpstox(), s, e, missing_only=True)
+    assert again["already_complete"] == 1 and again["underlyings"] == 0
+
+
+def test_slow_get_retries_429_then_succeeds(monkeypatch):
+    monkeypatch.setattr(ui.time, "sleep", lambda s: None)
+    calls = []
+
+    class Flaky:
+        def _get(self, path, params=None):
+            calls.append(path)
+            if len(calls) < 3:
+                raise RuntimeError("HTTP 429 Too Many Request Sent")
+            return {"data": ["ok"]}
+    assert ui._slow_get(Flaky(), "/x") == {"data": ["ok"]} and len(calls) == 3
