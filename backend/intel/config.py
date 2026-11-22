@@ -56,6 +56,9 @@ DEFAULTS: dict = {
     "nse": {"min_interval_s": 0.5, "timeout_s": 30, "retries": 3,
             # F&O option rows are ~50-100k a day; only per-underlying summaries are kept unless True
             "store_option_rows": False},
+    # where daily prices come from: "nse" (archives, with delivery data), "upstox" (API), or "both"
+    # (Upstox fills what NSE could not download; NSE rows always win)
+    "data": {"source": "both", "upstox_fo_only": False},
     "orderflow": {"enabled": False, "provider": None},
     # Phase 7 — paper trading only; nothing here ever places a real order
     "trading": {"capital": 1000000, "risk_per_trade_pct": 0.5, "atr_mult": 2.0, "swing_lookback": 10,

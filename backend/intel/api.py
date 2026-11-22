@@ -86,8 +86,9 @@ def status():
         errors = c.execute(select(db.source_files.c.dataset, db.source_files.c.as_of, db.source_files.c.error)
                            .where(db.source_files.c.status == "error")
                            .order_by(db.source_files.c.fetched_at.desc()).limit(10)).all()
+    from .upstox_ingest import survivorship_warning
     return {"demo": _is_demo(eng), "datasets": records(fr), "recent_errors": [dict(r._mapping) for r in errors],
-            "registry": REGISTRY, "config": load(), "database": eng.url.render_as_string(hide_password=True)}
+            "warning": survivorship_warning(eng), "registry": REGISTRY, "config": load(), "database": eng.url.render_as_string(hide_password=True)}
 
 
 @router.get("/screener")
@@ -116,7 +117,7 @@ async def screener(liquid_only: bool = True, limit: int = Query(200, ge=1, le=30
             "demo": _is_demo(eng), "universe": load()["universe"]["name"], "total": total,
             "shown": min(limit, len(snap)), "rows": records(snap[cols].head(limit)),
             "industries": sorted(x for x in panel["industry"].dropna().unique()),
-            "sources": _sources_for(eng, ["cm", "indices", "demo"])}
+            "sources": _sources_for(eng, ["cm", "indices", "upstox_cm", "upstox_index_Nifty 50", "demo"])}
 
 
 @router.get("/stock/{symbol}")
@@ -162,9 +163,11 @@ def research():
         m["stats"] = json.loads(m["stats"])
         m["run_at"] = m["run_at"].isoformat() if m["run_at"] else None
         out.append(m)
+    from .upstox_ingest import survivorship_warning
     known = {n: {"direction": d, "description": desc, "evidence_class": EVIDENCE_CLASS.get(n)}
              for n, (_, d, desc) in SIGNALS.items()}
     return {"demo": _is_demo(eng), "signals": known, "results": out, "filters": FILTER_BASE,
+            "warning": survivorship_warning(eng),
             "rules": load()["research"]}
 
 
@@ -598,7 +601,8 @@ def backtests_list():
     from .scoring import FACTORS
     eng = db.engine()
     b = load()["backtest"]
-    return {"runs": list_runs(eng), "factors": list(FACTORS), "signals": list(SIGNALS), "variants": b["variants"],
+    from .upstox_ingest import survivorship_warning
+    return {"runs": list_runs(eng), "warning": survivorship_warning(eng), "factors": list(FACTORS), "signals": list(SIGNALS), "variants": b["variants"],
             "defaults": {k: b[k] for k in ("top_k", "rebalance_sessions", "train_sessions", "test_sessions")},
             "demo": _is_demo(eng)}
 

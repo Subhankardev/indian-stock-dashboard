@@ -83,7 +83,9 @@ REGISTRY = [
     {"source": "NSE JSON API (FII/DII, historical deals, shareholding)", "auth": "session cookie from nseindia.com",
      "cost": "free", "rate_limit": "unpublished; paced", "status": "integrated (FII/DII, deals); shareholding in Phase 2"},
     {"source": "Upstox API", "auth": "daily OAuth token", "cost": "free for data",
-     "rate_limit": "per-second/minute limits; paced", "status": "integrated (live, intraday, option chain)"},
+     "rate_limit": "per-second/minute limits; paced",
+     "status": "integrated: daily prices + indices + futures OI (python -m intel.upstox_ingest), live feed, "
+               "intraday, option chain — no delivery data; current listings only (survivorship bias)"},
     {"source": "NSE tick-by-tick / order book history", "auth": "licence", "cost": "paid",
      "rate_limit": "n/a", "status": "not integrated — needed for Phase 4 order flow"},
     {"source": "Licensed fundamentals API", "auth": "API key", "cost": "paid", "rate_limit": "vendor",

@@ -72,7 +72,7 @@ def generate(eng, panel: pd.DataFrame, cfg: Optional[dict] = None) -> dict:
                             f"score {r[f'{side}_score']:.0f} · confidence {r[f'{side}_confidence']:.0%} · "
                             f"active factors: {', '.join(sorted(active & set(FACTORS)))}")
     fresh = db.dataset_freshness(eng)
-    cm = fresh[fresh["dataset"].isin(["cm", "demo"])]
+    cm = fresh[fresh["dataset"].isin(["cm", "upstox_cm", "demo"])]
     if len(cm):
         latest = pd.Timestamp(cm["latest"].max())
         age = len(pd.bdate_range(latest, pd.Timestamp(date.today()))) - 1

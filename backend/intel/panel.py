@@ -83,9 +83,13 @@ def universe_symbols(eng, cfg: dict) -> Optional[list]:
         t = db.fo_daily
         with eng.connect() as c:
             last = c.execute(select(t.c.date).order_by(t.c.date.desc()).limit(1)).scalar()
+            if last is not None:
+                return [r[0] for r in c.execute(select(t.c.symbol).distinct().where(t.c.date == last, t.c.instrument == "STF"))]
+            d = db.deriv_daily                      # Upstox-loaded F&O summaries
+            last = c.execute(select(d.c.date).where(d.c.kind == "stock").order_by(d.c.date.desc()).limit(1)).scalar()
             if last is None:
                 return []
-            return [r[0] for r in c.execute(select(t.c.symbol).distinct().where(t.c.date == last, t.c.instrument == "STF"))]
+            return [r[0] for r in c.execute(select(d.c.symbol).distinct().where(d.c.date == last, d.c.kind == "stock"))]
     return members(eng, name)
 
 

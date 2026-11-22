@@ -352,6 +352,11 @@ def run(eng, panel: pd.DataFrame, kind: str = "ranked", factors: Optional[list] 
               "universe": cfg["universe"]["name"], "liquidity": cfg["liquidity"],
               "bias_controls": ["decisions at close t, trades at open t+1", "survivorship-free daily universe",
                                 "point-in-time fundamentals/ownership", "costs + tiered slippage + capacity cap"]}
+    from .upstox_ingest import survivorship_warning
+    w = survivorship_warning(eng)
+    if w:
+        params["bias_controls"] = [x for x in params["bias_controls"] if not x.startswith("survivorship-free")]
+        params["warnings"] = [w]
     extra: dict = {}
     if kind == "ranked":
         if not factors:
