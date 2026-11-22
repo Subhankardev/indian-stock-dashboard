@@ -50,7 +50,7 @@ export function LineChart({ dates, series, height = 220, yFormat = (v) => v.toFi
   );
 }
 
-export function BarChart({ dates, values, height = 90, color = "var(--faint)", ref100 }) {
+export function BarChart({ dates, values, height = 90, color = "var(--faint)", colors, ref100 }) {
   const w = 900, h = height, padL = 52;
   const vals = values.map((v) => (v === null || v === undefined ? 0 : v));
   const max = Math.max(...vals, ref100 || 0, 1);
@@ -58,7 +58,7 @@ export function BarChart({ dates, values, height = 90, color = "var(--faint)", r
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="chart" role="img">
       {vals.map((v, i) => <rect key={i} x={padL + i * bw} y={h - (v / max) * h} width={Math.max(bw - 1, 1)}
-        height={(v / max) * h} fill={color} />)}
+        height={(v / max) * h} fill={colors ? colors[i] : color} />)}
       {ref100 !== undefined && <line x1={padL} x2={w} y1={h - (ref100 / max) * h} y2={h - (ref100 / max) * h} className="grid" />}
       <text x={padL - 6} y={10} textAnchor="end" className="axis">{max >= 1e6 ? `${(max / 1e6).toFixed(1)}M` : max.toFixed(0)}</text>
     </svg>
@@ -67,4 +67,18 @@ export function BarChart({ dates, values, height = 90, color = "var(--faint)", r
 
 export function Legend({ items }) {
   return <div className="legend">{items.map((s) => <span key={s.label}><i style={{ background: s.color }} />{s.label}</span>)}</div>;
+}
+
+export const CLASS_INFO = {
+  A: "A · confirmed disclosed transaction (bulk/block deal by a classified institution)",
+  B: "B · observable ownership change (shareholding / MF holdings, from publication date)",
+  C: "C · market-wide positioning — never stock-specific",
+  D: "D · possible accumulation/distribution, inferred from price, volume and delivery",
+  E: "E · unclassified large activity — direction or identity unknown",
+  T: "T · technical / relative-strength signal",
+};
+
+export function ClassTag({ c }) {
+  if (!c) return null;
+  return <span className={`cls cls-${c}`} title={CLASS_INFO[c]}>{c}</span>;
 }

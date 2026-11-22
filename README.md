@@ -12,8 +12,9 @@ Design, data sources, schema, methodology and roadmap: **[docs/DESIGN.md](docs/D
 |---|---|---|
 | 0 | Design (docs/DESIGN.md) | done |
 | 1 | NSE download + provenance, universe, liquidity filters, indicators, relative strength, event-study / walk-forward backtest framework, screener / stock / research pages | done |
-| 2 | Delivery analytics, bulk/block deals with entity classes, FII/DII, shareholding, accumulation/distribution evidence | next |
-| 3–9 | Derivatives, VWAP/order flow, fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
+| 2 | Delivery analytics, bulk/block deals with entity classes, FII/DII, shareholding + MF imports, accumulation/distribution evidence (classes A–E), Institutional page | done |
+| 3 | F&O build-ups, basis, PCR/IV, participant OI | next |
+| 4–9 | VWAP/order flow, fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
 
 ## Quick start (on your Mac)
 
@@ -70,10 +71,36 @@ DATABASE_URL=sqlite:///data/demo.db uvicorn app.main:app --reload
 
 Every page shows a **Demo data** banner while synthetic data is loaded.
 
+## Institutional evidence (Phase 2)
+
+Every piece of accumulation/distribution evidence carries a class, shown wherever it is used:
+
+| Class | What | Example |
+|---|---|---|
+| A | Confirmed disclosed transaction | Bulk/block deal where the client is classified as a mutual fund, insurer, FPI, bank or pension fund |
+| B | Ownership change | FPI+DII holding up ≥0.5 pp quarter on quarter; MF shares up ≥5% month on month. Used only from the **publication date** |
+| C | Market-wide | FII/DII cash flows. **Never** attached to a stock |
+| D | Possible (inferred) | Rising delivery while price holds, high-delivery up-days, up/down volume, CMF, failed breakdowns |
+| E | Unclassified large activity | Deals by brokers, prop desks and individuals; volume spikes without a price move |
+
+- **Daily:** `python -m intel.ingest --today` also stores the day's bulk/block deals and the provisional FII/DII figures. NSE only shows the latest day of each, so run it every day.
+- **History and data NSE doesn't publish as one file:** import a CSV.
+  ```bash
+  python -m intel.imports deals bulk_deals.csv --kind bulk     # NSE website's bulk-deal CSV download
+  python -m intel.imports shareholding shareholding.csv        # symbol,quarter_end,category,pct[,published_on]
+  python -m intel.imports mf mf_holdings.csv                   # month_end,amc,scheme,symbol,shares[,published_on]
+  python -m intel.imports fii_dii fii_dii.csv                  # date,category,buy_value,sell_value,net_value
+  ```
+  Without `published_on`, a filing is assumed public 21 days after the quarter end (shareholding) or 10 days after the month end (MF), so it is never used before it could have been known.
+- **Entity classes** come from name rules (`intel/entities.py`). Each deal shows the rule that matched. Correct a name with `PUT /api/intel/entities` or `backend/entity_overrides.csv` (`name,entity_class,notes`); a manual entry always wins.
+- **Accumulation / distribution score** = 0.30·A + 0.25·B + 0.30·D + 0.15·derivatives. A component is weighted **only after its signal passes** its event study on the Research page (`scoring.require_pass`). Confidence is the share of components that have data; derivatives arrive in Phase 3, so confidence is at most 85% for now.
+- `python -m intel.evidence --store` writes every fired signal, with its evidence, to the `signals` table.
+
 ## Pages
 
 - **Screener**: the latest session for every liquid stock, sortable by RS rank, relative strength over 3/6 months, RS momentum, RVOL, delivery % and its 20-day average, RSI, ADX, distance from the 52-week high and average traded value. Filter by industry.
-- **Stock**: price with EMA 20 / 50 DMA / 200 DMA, volume, the RS line vs Nifty 50, daily delivery %, and the file the latest row came from. With an Upstox token, also the option chain.
+- **Stock**: price with EMA 20 / 50 DMA / 200 DMA, volume, the RS line vs Nifty 50, daily delivery %, the accumulation/distribution evidence with classes, shareholding and deals, and the file the latest row came from. With an Upstox token, also the option chain.
+- **Institutional**: FII/DII flows (class C), stocks with the most accumulation/distribution evidence, and recent bulk/block deals with entity classes.
 - **Research**: each signal's event study, giving events, hit rate, 20-day excess return after costs, 95% range, sub-period results and a PASS/fail verdict with the reason.
 - **Overview**: data freshness per dataset (flags stale data), recent download errors, the source registry, and the active configuration.
 
@@ -105,6 +132,9 @@ backend/intel/
   db.py             schema (SQLAlchemy Core)
   indicators.py     trend, momentum, volatility, volume, delivery indicators
   relative_strength.py  RS vs benchmark, cross-sectional rank, sector-relative
+  entities.py       deal-client classification (rules + manual overrides)
+  evidence.py       accumulation/distribution evidence, classes A–E, scores
+  imports.py        CSV imports: deals, shareholding, MF holdings, FII/DII
   panel.py          universe + liquidity filters + indicators per stock/date
   research/         event study, signals, walk-forward, CLI
   api.py            /api/intel/* endpoints

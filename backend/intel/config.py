@@ -50,6 +50,8 @@ DEFAULTS: dict = {
             "fundamentals": 10, "derivatives": 10, "sector": 5, "valuation": 5, "risk": 5,
         },
         "min_confidence": 0.6,
+        # a component enters a score only after its signal passed its event study
+        "require_pass": True,
     },
     "nse": {"min_interval_s": 0.5, "timeout_s": 30, "retries": 3},
 }

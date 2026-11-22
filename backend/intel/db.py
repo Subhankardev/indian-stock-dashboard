@@ -134,6 +134,17 @@ shareholding = Table(
     Column("source_id", Integer),
 )
 
+mf_holdings = Table(
+    "mf_holdings", meta,
+    Column("month_end", Date, primary_key=True),
+    Column("amc", String(120), primary_key=True),
+    Column("scheme", String(200), primary_key=True),
+    Column("symbol", String(40), primary_key=True),
+    Column("shares", Float), Column("market_value_cr", Float),
+    Column("published_on", Date),          # when the AMC published it (≈ month end + 10 days)
+    Column("source_id", Integer),
+)
+
 fundamentals = Table(
     "fundamentals", meta,
     Column("symbol", String(40), primary_key=True),

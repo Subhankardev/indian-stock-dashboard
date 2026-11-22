@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { getJSON, fmt } from "./api";
-import { DemoBanner, ErrorBox } from "./Common";
+import { ClassTag, DemoBanner, ErrorBox } from "./Common";
 
 export default function Research() {
   const [d, setD] = useState(null);
@@ -28,7 +28,7 @@ export default function Research() {
           positive results in ≥{d.rules.pass_min_positive_subperiods} of {d.rules.subperiods} sub-periods. Only passing
           signals may feed the score (Phase 6).</div>
         <table className="grid-table">
-          <thead><tr><th>Signal</th><th>Dir</th><th>Events</th><th>Hit rate</th><th>{h}D excess / event-day</th>
+          <thead><tr><th>Signal</th><th>Class</th><th>Dir</th><th>Events</th><th>Hit rate</th><th>{h}D excess / event-day</th>
             <th>95% range</th><th>Sub-periods</th><th>Verdict</th></tr></thead>
           <tbody>{Object.entries(d.signals).map(([name, meta]) => {
             const r = byName[name];
@@ -36,6 +36,7 @@ export default function Research() {
             return (
               <tr key={name} title={meta.description}>
                 <td><b>{name}</b><div className="muted small-text">{meta.description}</div></td>
+                <td><ClassTag c={meta.evidence_class} /></td>
                 <td>{meta.direction}</td>
                 <td className="num">{r ? r.stats.events : "–"}</td>
                 <td className="num">{s && s.hit_rate !== undefined ? `${(s.hit_rate * 100).toFixed(0)}%` : "–"}</td>
