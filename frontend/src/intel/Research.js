@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { getJSON, fmt } from "./api";
-import { ClassTag, DemoBanner, ErrorBox } from "./Common";
+import { ClassTag, DataWarning, DemoBanner, ErrorBox } from "./Common";
 
 export default function Research() {
   const [d, setD] = useState(null);
@@ -18,6 +18,7 @@ export default function Research() {
   return (
     <>
       <DemoBanner demo={d.demo} />
+      <DataWarning text={d.warning} />
       <div className="panel">
         <div className="panel-head"><h3>Signal research · event studies</h3>
           <button className="primary" onClick={run} disabled={busy}>{busy ? "Running…" : "Re-run all"}</button></div>

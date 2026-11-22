@@ -85,3 +85,8 @@ export function ClassTag({ c }) {
   if (!c) return null;
   return <span className={`cls cls-${c}`} title={CLASS_INFO[c]}>{c}</span>;
 }
+
+export function DataWarning({ text }) {
+  if (!text) return null;
+  return <div className="banner warn-banner"><div><b>Data caveat.</b> {text}</div></div>;
+}

@@ -63,6 +63,30 @@ cd frontend && npm install && npm start
 
 Open http://localhost:3000.
 
+### Using the Upstox API for data
+
+1. Put `UPSTOX_API_KEY` and `UPSTOX_API_SECRET` in `backend/.env`, start the backend, and open `http://localhost:8000/api/upstox/login` to get the day's token. See "Upstox (optional)" below.
+2. Backfill daily prices for every listed NSE stock, Nifty 50/100/200/500 and Bank, and futures open interest:
+
+```bash
+python -m intel.upstox_ingest --from 2023-01-01
+```
+
+That's about 2,000 stocks, paced under Upstox's rate limits, so expect 15–30 minutes. Add `--fo-only` for just the roughly 200 F&O stocks, which takes a few minutes. Expired futures history needs the access token.
+
+3. `python -m intel.daily` then tops up the last 10 days from Upstox every evening, plus today's NIFTY/BANKNIFTY option-chain summary (Upstox has no option history, so that builds forward day by day). The `data.source` setting in `intel_config.json` chooses `"upstox"`, `"nse"` or `"both"` (the default).
+
+**What Upstox can't provide, and how the system handles it:**
+
+| Missing from Upstox | Effect | Fix |
+|---|---|---|
+| Delivery quantity / delivery % | Delivery-based class-D clues and the delivery charts stay blank | NSE bhavcopy (`python -m intel.ingest`). NSE rows always win over Upstox rows for the same day |
+| Delisted stocks (only today's listings exist) | Backtests and signal tests have **survivorship bias**: results look better than reality. Overview, Research and Backtests show a warning | NSE bhavcopy history covers every stock that traded |
+| Exact traded value / VWAP | Approximated as volume × typical price (liquidity filter, VWAP) | NSE bhavcopy |
+| Bulk/block deals, FII/DII, participant OI, index lists and industries | Those pages stay empty, and sector factors fall back to the whole universe | `python -m intel.ingest --today --lists` (NSE) or `python -m intel.imports …` CSVs |
+
+The best results come from Upstox for reliability plus the NSE files for delivery and deals. With `data.source: "both"` the daily job tries both; if NSE is blocked, that step fails and is logged, and the rest still runs.
+
 ### Without NSE access: demo data
 
 ```bash

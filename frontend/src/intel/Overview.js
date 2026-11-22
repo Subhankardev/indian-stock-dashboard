@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { getJSON } from "./api";
-import { ClassTag, DemoBanner, ErrorBox, Legend, LineChart } from "./Common";
+import { ClassTag, DataWarning, DemoBanner, ErrorBox, Legend, LineChart } from "./Common";
 import { fmt, pct, cls } from "./api";
 
 const NAMES = { cm: "Cash market + delivery (sec_bhavdata_full)", indices: "Index closes (ind_close_all)",
-  fo: "F&O bhavcopy (UDiFF)", participant_oi: "Participant-wise OI", demo: "Synthetic demo data" };
+  fo: "F&O bhavcopy (UDiFF)", participant_oi: "Participant-wise OI", demo: "Synthetic demo data",
+  upstox_cm: "Daily prices (Upstox API, no delivery data)", upstox_fo: "Futures OI (Upstox API)",
+  upstox_options: "Option-chain summary (Upstox, daily from today)" };
 
 export default function Overview({ onOpen }) {
   const [s, setS] = useState(null);
@@ -19,6 +21,7 @@ export default function Overview({ onOpen }) {
   return (
     <>
       <DemoBanner demo={s.demo} />
+      <DataWarning text={s.warning} />
       {mk && mk.regime && (
         <div className="panel">
           <div className="panel-head"><h3>Market regime <ClassTag c="C" /></h3><span className="muted small-text">as of {mk.as_of}</span></div>
@@ -58,7 +61,8 @@ export default function Overview({ onOpen }) {
         <div className="panel-head"><h3>Data freshness</h3><span className="muted small-text">{s.database}</span></div>
         {s.datasets.length === 0 ? (
           <div className="empty">No data loaded yet. On your Mac run<br />
-            <code>cd backend && python -m intel.ingest --lists --from 2023-01-01</code></div>
+            <code>cd backend && python -m intel.ingest --lists --from 2023-01-01</code><br />or, with Upstox:
+            <code>python -m intel.upstox_ingest --from 2023-01-01</code></div>
         ) : (
           <table className="grid-table">
             <thead><tr><th>Dataset</th><th>Latest session</th><th>Files</th><th>Age</th></tr></thead>

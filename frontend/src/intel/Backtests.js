@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { getJSON, fmt, pct, cls } from "./api";
-import { DemoBanner, ErrorBox, Legend, LineChart } from "./Common";
+import { DataWarning, DemoBanner, ErrorBox, Legend, LineChart } from "./Common";
 
 const BCOL = { "Nifty 50": "#f59e0b", "Nifty 500": "#94a3b8" };
 
@@ -39,6 +39,7 @@ function Report({ r }) {
           { key: "eq", color: "var(--primary)", values: s.equity, width: 2 }]} />
         <div className="muted small-text">Drawdown</div>
         <LineChart dates={s.dates} height={110} yFormat={(v) => `${v.toFixed(0)}%`} series={[{ key: "dd", color: "var(--down)", values: s.drawdown }]} />
+        {(r.params.warnings || []).map((w) => <div key={w} className="warn small-text">⚠ {w}</div>)}
         <div className="muted small-text">Bias controls: {(r.params.bias_controls || []).join(" · ")}. Costs: full delivery model with
           {` ${r.params.costs.slippage_bps_liquid}/${r.params.costs.slippage_bps_mid}`} bps slippage (liquid/mid), capacity ≤ {r.params.capacity_pct_of_value}% of 20-day traded value.</div>
       </div>
@@ -99,6 +100,7 @@ export default function Backtests() {
   return (
     <>
       <DemoBanner demo={meta.demo} />
+      <DataWarning text={meta.warning} />
       <div className="panel">
         <div className="panel-head"><h3>Portfolio backtests</h3></div>
         <div className="muted small-text">Decisions at the close, trades at the next open; survivorship-free daily universe; point-in-time data;
