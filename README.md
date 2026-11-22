@@ -14,8 +14,9 @@ Design, data sources, schema, methodology and roadmap: **[docs/DESIGN.md](docs/D
 | 1 | NSE download + provenance, universe, liquidity filters, indicators, relative strength, event-study / walk-forward backtest framework, screener / stock / research pages | done |
 | 2 | Delivery analytics, bulk/block deals with entity classes, FII/DII, shareholding + MF imports, accumulation/distribution evidence (classes A–E), Institutional page | done |
 | 3 | F&O: futures build-ups (class F), basis, rollover, PCR, max-OI strikes, ATM IV, participant OI; Derivatives page | done |
-| 4 | VWAP / anchored VWAP; order flow behind a flag | next |
-| 5–9 | Fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
+| 4 | Daily VWAP + anchored VWAPs, absorption proxy, intraday VWAP bands + volume profile (Upstox 1-min), order-flow features behind a flag | done |
+| 5 | Fundamentals (filings / CSV), sector-aware quality & valuation | next |
+| 6–9 | Fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
 
 ## Quick start (on your Mac)
 
@@ -117,6 +118,13 @@ Every piece of accumulation/distribution evidence carries a class, shown whereve
 - **Participant OI** (FII/DII/Pro/Client share of index-futures longs) is market-wide (class C).
 - Futures build-ups are the derivatives component (weight 0.15) of the accumulation and distribution scores, and count only after `long_buildup` or `short_buildup` passes its test.
 
+## VWAP and order flow (Phase 4)
+
+- **Daily VWAP is exact**: NSE's bhavcopy gives each day's average traded price (turnover ÷ volume). Rolling VWAP 20/50 and **anchored VWAPs** are built from it. Anchors are the 52-week high, the 52-week low, the highest-volume session of the last 60, and the start of the year; each is chosen only from data available on that day.
+- **Absorption (daily-bar proxy, class D)**: ≥2× volume in a narrow range (≤0.6× ATR) closing in the upper or lower third.
+- **Intraday**: VWAP with ±1σ/±2σ bands and a volume profile (POC, 70% value area) from Upstox 1-minute candles. This is a bar approximation, not order flow.
+- **Order flow** (cumulative delta, large trades, order-book imbalance, tick absorption, icebergs) needs tick-by-tick or order-book data. It is **disabled**; the Overview page lists what each feature needs and why. Enable it with `"orderflow": {"enabled": true, "provider": ...}` once a licensed feed and its loader exist.
+
 ## Pages
 
 - **Screener**: the latest session for every liquid stock, sortable by RS rank, relative strength over 3/6 months, RS momentum, RVOL, delivery % and its 20-day average, RSI, ADX, distance from the 52-week high and average traded value. Filter by industry.
@@ -158,6 +166,9 @@ backend/intel/
   evidence.py       accumulation/distribution evidence, classes A–E, scores
   imports.py        CSV imports: deals, shareholding, MF holdings, FII/DII
   derivatives.py    F&O daily summaries, implied volatility, build-ups, participant OI
+  vwap.py           daily rolling + anchored VWAP, absorption proxy
+  intraday.py       1-minute VWAP bands and volume profile
+  orderflow.py      tick/order-book features (feature-flagged, explain what they need)
   panel.py          universe + liquidity filters + indicators per stock/date
   research/         event study, signals, walk-forward, CLI
   api.py            /api/intel/* endpoints

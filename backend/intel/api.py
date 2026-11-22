@@ -317,3 +317,56 @@ def stock_derivatives(symbol: str, days: int = Query(120, ge=5, le=1000)):
     if d.empty:
         return {"symbol": symbol.upper(), "has_fo": False, "series": []}
     return {"symbol": symbol.upper(), "has_fo": True, "series": records(d.tail(days).drop(columns=["source_id"]))}
+
+
+# ------------------------------------------------------------- Phase 4 --- #
+@router.get("/stock/{symbol}/vwap")
+async def stock_vwap(symbol: str, days: int = Query(250, ge=20, le=2000)):
+    """Daily rolling and anchored VWAPs (exact: NSE average traded price × volume)."""
+    from .vwap import ANCHORS
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    g = panel[panel["symbol"] == symbol.upper()] if not panel.empty else panel
+    if g.empty:
+        raise HTTPException(404, f"No data for {symbol.upper()}")
+    cols = ["date", "close", "vwap20", "vwap50"] + [f"avwap_{k}" for k in ANCHORS]
+    last = g.iloc[-1]
+    latest = {k: _clean(last[k]) for k in cols[1:] + [f"dist_avwap_{a}_pct" for a in ANCHORS] +
+              ["dist_vwap20_pct", "absorption_up", "absorption_down", "avwap_reclaim", "avwap_loss"] if k in g}
+    return {"symbol": symbol.upper(), "as_of": _clean(last["date"]), "anchors": ANCHORS, "latest": latest,
+            "series": records(g[cols].tail(days))}
+
+
+@router.get("/stock/{symbol}/intraday")
+async def stock_intraday(symbol: str, day: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$")):
+    """Intraday VWAP bands and volume profile from 1-minute candles (Upstox). Uses labelled
+    synthetic bars when the database is in demo mode."""
+    from . import intraday
+    eng = db.engine()
+    d = date.fromisoformat(day) if day else None
+    if _is_demo(eng):
+        panel = await run_in_threadpool(panel_cached, eng)
+        g = panel[panel["symbol"] == symbol.upper()] if not panel.empty else panel
+        base = float(g["close"].iloc[-1]) if len(g) else 1000.0
+        m = intraday.synthetic_session(d or date.today(), base=base, seed=sum(map(ord, symbol.upper())))
+        source = "synthetic"
+    else:
+        try:
+            m = await run_in_threadpool(intraday.fetch_minutes, symbol.upper(), d)
+        except Exception as exc:
+            raise HTTPException(502, f"1-minute candles unavailable (needs a valid UPSTOX_ACCESS_TOKEN): {exc}")
+        source = "upstox"
+        if m.empty:
+            raise HTTPException(404, "No 1-minute candles for that day (holiday or before the open)")
+    out = intraday.summary(m)
+    out.update(symbol=symbol.upper(), source=source, demo=source == "synthetic",
+               note="Approximation from 1-minute bars: each bar's volume is placed at its typical price. "
+                    "Not order flow — see /api/intel/orderflow.")
+    return out
+
+
+@router.get("/orderflow")
+def orderflow_status():
+    """Tick/order-book features and why each is off (needs a licensed feed)."""
+    from .orderflow import status
+    return status()

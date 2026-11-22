@@ -219,8 +219,9 @@ def attach(eng, panel: pd.DataFrame) -> pd.DataFrame:
     if panel.empty:
         return panel
     from .derivatives import features as deriv_features
+    from .vwap import features as vwap_features
     return pd.concat([panel, inferred(panel), deal_features(eng, panel), ownership_features(eng, panel),
-                      deriv_features(eng, panel)], axis=1)
+                      deriv_features(eng, panel), vwap_features(panel)], axis=1)
 
 
 COMPONENT_SIGNALS = {
@@ -305,6 +306,12 @@ def stock_evidence(eng, row: pd.Series) -> list[dict]:
     for k, desc in DIST_SUBS.items():
         if row.get(k):
             items.append({"class": "D", "direction": "bearish", "label": "Possible distribution", "detail": desc})
+    if row.get("absorption_up"):
+        items.append({"class": "D", "direction": "bullish", "label": "Possible absorption (daily bar)",
+                      "detail": "≥2× volume in a narrow range, closing in the upper third — bar-level proxy, not tick data"})
+    if row.get("absorption_down"):
+        items.append({"class": "D", "direction": "bearish", "label": "Possible absorption (daily bar)",
+                      "detail": "≥2× volume in a narrow range, closing in the lower third — bar-level proxy, not tick data"})
     if row.get("e_volume_spike"):
         items.append({"class": "E", "direction": "neutral", "label": "Unclassified volume spike",
                       "detail": "Volume ≥3× average with <1% price change — direction unknown"})

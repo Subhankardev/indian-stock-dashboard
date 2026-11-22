@@ -102,6 +102,29 @@ def short_covering(p: pd.DataFrame) -> pd.Series:
     return p["liquid"].fillna(False) & (p["f_buildup"] == "short_covering") if "f_buildup" in p else pd.Series(False, index=p.index)
 
 
+# ---- Phase 4: VWAP --------------------------------------------------------------------- #
+def avwap_reclaim(p: pd.DataFrame) -> pd.Series:
+    """Close moves back above the VWAP anchored at the 60-session volume spike, on ≥1.2× volume."""
+    return p["liquid"].fillna(False) & _col(p, "avwap_reclaim")
+
+
+def avwap_loss(p: pd.DataFrame) -> pd.Series:
+    return p["liquid"].fillna(False) & _col(p, "avwap_loss")
+
+
+def absorption_up(p: pd.DataFrame) -> pd.Series:
+    """Class D (bar proxy): ≥2× volume, narrow range, close in the upper third, above 50-DMA."""
+    return p["liquid"].fillna(False) & _col(p, "absorption_up") & (p["close"] > p["dma50"])
+
+
+def above_avwap_52w_high(p: pd.DataFrame) -> pd.Series:
+    """Price back above the VWAP anchored at the 52-week high (buyers since the top are in profit)."""
+    if "dist_avwap_hi52_pct" not in p:
+        return pd.Series(False, index=p.index)
+    prev = p.groupby("symbol")["dist_avwap_hi52_pct"].shift(1)
+    return p["liquid"].fillna(False) & (prev < 0) & (p["dist_avwap_hi52_pct"] > 0)
+
+
 SIGNALS: dict[str, tuple[Signal, str, str]] = {
     # name: (function, direction, description)
     "rs_leaders": (rs_leaders, "bullish", "Top-10% 6-month relative strength, RS rising"),
@@ -120,6 +143,10 @@ SIGNALS: dict[str, tuple[Signal, str, str]] = {
     "long_buildup": (long_buildup, "bullish", "Class F: futures long build-up (price ↑, OI ↑ ≥5% over 5 sessions)"),
     "short_buildup": (short_buildup, "bearish", "Class F: futures short build-up (price ↓, OI ↑ ≥5% over 5 sessions)"),
     "short_covering": (short_covering, "bullish", "Class F: short covering (price ↑, OI ↓ ≥5% over 5 sessions)"),
+    "avwap_reclaim": (avwap_reclaim, "bullish", "Reclaims VWAP anchored at the 60-day volume spike on 1.2× volume"),
+    "avwap_loss": (avwap_loss, "bearish", "Loses VWAP anchored at the 60-day volume spike on 1.2× volume"),
+    "absorption_up": (absorption_up, "bullish", "Class D: 2× volume, narrow range, close in upper third (bar proxy)"),
+    "above_avwap_52w_high": (above_avwap_52w_high, "bullish", "Closes above VWAP anchored at the 52-week high"),
 }
 
 # Evidence class of each signal (docs/DESIGN.md §8); price/RS signals are technical (T).
@@ -127,4 +154,5 @@ EVIDENCE_CLASS = {"rs_leaders": "T", "rs_laggards": "T", "breakout_volume": "T",
                   "near_52w_high_strong": "T", "possible_accumulation": "D", "possible_distribution": "D",
                   "delivery_spike_up": "D", "inst_deal_buy": "A", "inst_deal_sell": "A",
                   "ownership_increase": "B", "ownership_decrease": "B", "mf_adds": "B",
-                  "long_buildup": "F", "short_buildup": "F", "short_covering": "F"}
+                  "long_buildup": "F", "short_buildup": "F", "short_covering": "F",
+                  "avwap_reclaim": "T", "avwap_loss": "T", "absorption_up": "D", "above_avwap_52w_high": "T"}

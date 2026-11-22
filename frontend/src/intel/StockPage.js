@@ -4,6 +4,7 @@ import { BarChart, DemoBanner, ErrorBox, Legend, LineChart } from "./Common";
 import OptionChainPanel from "../components/OptionChainPanel";
 import EvidencePanel from "./EvidencePanel";
 import FuturesPanel from "./FuturesPanel";
+import VwapPanel from "./VwapPanel";
 
 const RANGES = [["3M", 63], ["6M", 126], ["1Y", 250], ["2Y", 500]];
 
@@ -73,6 +74,7 @@ export default function StockPage({ symbol }) {
         <div className="muted small-text">Share of traded quantity marked for delivery (NSE). The line is the 20-day average.
           High delivery is a clue, not proof, of institutional buying (evidence class D).</div>
       </div>
+      <VwapPanel symbol={symbol} days={days} />
       <EvidencePanel symbol={symbol} />
       <FuturesPanel symbol={symbol} />
       {d.source && (

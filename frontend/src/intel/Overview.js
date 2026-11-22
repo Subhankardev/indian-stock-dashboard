@@ -8,7 +8,8 @@ const NAMES = { cm: "Cash market + delivery (sec_bhavdata_full)", indices: "Inde
 export default function Overview() {
   const [s, setS] = useState(null);
   const [err, setErr] = useState(null);
-  useEffect(() => { getJSON("/api/intel/status").then(setS).catch(setErr); }, []);
+  const [of, setOf] = useState(null);
+  useEffect(() => { getJSON("/api/intel/status").then(setS).catch(setErr); getJSON("/api/intel/orderflow").then(setOf).catch(() => {}); }, []);
   if (err) return <ErrorBox error={`Backend not reachable: ${err.message}`} />;
   if (!s) return <div className="panel muted">Loading…</div>;
   const today = new Date();
@@ -43,6 +44,19 @@ export default function Overview() {
           </tbody>
         </table>
       </div>
+      {of && (
+        <div className="panel">
+          <div className="panel-head"><h3>Order-flow features</h3>
+            <span className={`pill ${of.enabled ? "ok" : "off"}`}>{of.enabled ? `provider: ${of.provider}` : "disabled"}</span></div>
+          <table className="grid-table">
+            <thead><tr><th>Feature</th><th>Needs</th><th>Why the free data can't do it</th><th>Status</th></tr></thead>
+            <tbody>{of.features.map((f) => (
+              <tr key={f.key}><td>{f.label}</td><td>{f.needs}</td><td className="muted">{f.why}</td><td className="muted">{f.reason}</td></tr>))}
+            </tbody>
+          </table>
+          <div className="muted small-text">Available instead: {of.available_instead.join(" · ")}. Possible sources:
+            {" "}{of.providers.map((p) => `${p.name} (${p.cost})`).join("; ")}.</div>
+        </div>)}
       <div className="panel">
         <div className="panel-head"><h3>Active configuration</h3>
           <span className="muted small-text">Edit backend/intel_config.json — no code changes needed</span></div>
