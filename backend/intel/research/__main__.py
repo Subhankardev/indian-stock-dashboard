@@ -21,11 +21,12 @@ from ..panel import build_panel, load_index
 from . import event_study
 from .signals import SIGNALS
 
-RULE_VERSION = "p1.0"
+RULE_VERSION = "p2.0"
 
 
 def test_all(eng, cfg, names=None, start=None) -> dict:
-    panel = build_panel(eng, cfg, start=start)
+    from ..evidence import attach
+    panel = attach(eng, build_panel(eng, cfg, start=start))
     if panel.empty:
         raise SystemExit("No price data. Run: python -m intel.ingest --from 2022-01-01")
     rules = cfg["research"]
