@@ -146,9 +146,11 @@ def test_rate_limited_history_keeps_live_contracts_and_retry_fills_gaps(monkeypa
     assert res["underlyings"] == 1 and res["errors"] == 0 and res["partial_history"] == 1
     assert "rate limit" in res["first_errors"][0] and "--futures-only" in res["next"]
     assert len(db.read_sql(eng, select(db.deriv_daily))) > 0, "live-contract OI kept"
-    # live contract covered the whole year here, so a --futures-only rerun has nothing to fill
+    # history incomplete -> a --futures-only rerun retries it, then remembers it is complete
     again = ui.load_futures(eng, FakeUpstox(), s, e, missing_only=True)
-    assert again["already_complete"] == 1 and again["underlyings"] == 0
+    assert again["already_complete"] == 0 and again["underlyings"] == 1 and again["partial_history"] == 0
+    third = ui.load_futures(eng, FakeUpstox(), s, e, missing_only=True)
+    assert third["already_complete"] == 1 and third["underlyings"] == 0
 
 
 def test_slow_get_retries_429_then_succeeds(monkeypatch):
@@ -162,3 +164,18 @@ def test_slow_get_retries_429_then_succeeds(monkeypatch):
                 raise RuntimeError("HTTP 429 Too Many Request Sent")
             return {"data": ["ok"]}
     assert ui._slow_get(Flaky(), "/x") == {"data": ["ok"]} and len(calls) == 3
+
+
+def test_network_errors_are_retried(monkeypatch):
+    monkeypatch.setattr(ui.time, "sleep", lambda s: None)
+    n = []
+
+    def flaky():
+        n.append(1)
+        if len(n) < 3:
+            raise RuntimeError("HTTPSConnectionPool(host='api.upstox.com', port=443): Read timed out.")
+        return "ok"
+    assert ui._retry(flaky) == "ok" and len(n) == 3
+    with pytest.raises(ValueError):
+        ui._retry(lambda: (_ for _ in ()).throw(ValueError("bad symbol")))
+    assert "network error" in ui._short(RuntimeError("Max retries exceeded with url"))
