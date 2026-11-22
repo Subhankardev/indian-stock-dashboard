@@ -103,3 +103,9 @@ def test_upstox_client_cleans_token_and_refuses_non_ascii():
     assert UpstoxClient(access_token="​" + REAL + "​").token == REAL
     with pytest.raises(UpstoxError, match="non-ASCII"):
         UpstoxClient(access_token="tokén")._headers()
+
+
+def test_root_page_explains_where_the_dashboard_is():
+    from app.main import app
+    r = TestClient(app).get("/")
+    assert r.status_code == 200 and "Backend is running" in r.text and "localhost:3000" in r.text
