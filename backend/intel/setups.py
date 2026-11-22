@@ -81,8 +81,10 @@ def setup_for(row: pd.Series, history: pd.DataFrame, direction: str = "bullish",
         notes.append("just below the 52-week high (overhead supply)")
     if row.get("max_ce_oi_strike") and long_ and trigger < float(row["max_ce_oi_strike"]) < targets[0]:
         notes.append(f"call-OI wall at {row['max_ce_oi_strike']} before target 1")
+    industry = row.get("industry")
+    industry = industry if isinstance(industry, str) and industry else None   # NaN without sector lists
     return {
-        "symbol": row.get("symbol"), "industry": row.get("industry"), "direction": direction, "valid": qty > 0,
+        "symbol": row.get("symbol"), "industry": industry, "direction": direction, "valid": qty > 0,
         "reason": None if qty > 0 else "position size rounds to 0",
         "as_of": str(pd.Timestamp(row["date"]).date()), "entry_rule": t["entry"],
         "trigger": round(trigger, 2), "stop": round(stop, 2), "targets": [round(x, 2) for x in targets],
