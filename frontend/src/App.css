@@ -427,3 +427,7 @@ th.inactive { text-decoration: line-through; }
 .nav { flex-wrap: wrap; }
 .nav button { padding: 6px 9px; font-size: 13px; }
 .topbar .search { min-width: 180px; max-width: 320px; }
+.bt-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 10px; }
+.bt-form label { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text-2); }
+.bt-form select, .bt-form input { padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); max-width: 320px; }
+.bt-form input { width: 80px; }

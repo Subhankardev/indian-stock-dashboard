@@ -18,8 +18,8 @@ Design, data sources, schema, methodology and roadmap: **[docs/DESIGN.md](docs/D
 | 5 | Point-in-time fundamentals (CSV import), sector-aware quality & valuation scores, market cap, fundamentals tested as a filter | done |
 | 6 | Multi-factor scoring (tested factors only, confidence, agreement, conflicts), market regime, breadth, sector strength, Rankings page, special situations | done |
 | 7 | Trade setups (ATR/swing stops, R targets), sizing, Indian delivery cost model, exposure limits, paper trading, alerts (+ Telegram), daily job | done |
-| 8 | Portfolio backtests, walk-forward reports, sensitivity | next |
-| 9 | Research assistant grounded in the database | planned |
+| 8 | Portfolio backtests (ranked and signal + stops), walk-forward, sensitivity, reports vs Nifty 50/500; event studies by year/regime with bootstrap CIs | done |
+| 9 | Research assistant grounded in the database | next |
 
 ## Quick start (on your Mac)
 
@@ -188,6 +188,33 @@ agreement  = share of available factors with p > 60
 
   Duplicates are suppressed, and each alert is sent once.
 
+## Portfolio backtests (Phase 8)
+
+```bash
+python -m intel.backtest --factors relative_strength,momentum --top 20 --rebalance 5   # ranked portfolio
+python -m intel.backtest --signal breakout_volume                                    # signal + setup, stops, sizing
+python -m intel.backtest --walk-forward                                              # pick among variants, OOS only
+python -m intel.backtest --sensitivity --factors relative_strength,momentum          # top-K × rebalance × cost grid
+```
+
+- **Bias controls**:
+  - decisions are made at the close of day t and traded at the open of t+1
+  - a survivorship-free universe: every stock that traded and passed liquidity *on that date*
+  - point-in-time fundamentals and ownership
+  - the full cost model with **tiered slippage** (10 bps liquid / 30 bps mid-cap)
+  - a **capacity cap** of 5% of 20-day traded value
+  - a no-look-ahead test that truncates history and checks results are identical
+- **Reports**:
+  - CAGR, volatility, Sharpe, Sortino, max drawdown, Calmar, turnover, exposure
+  - hit rate, profit factor and expectancy (signal mode)
+  - beta, information ratio and excess CAGR vs **Nifty 50 and Nifty 500**
+  - calendar years side by side
+
+  Runs are saved in `backtest_runs` and shown on the Backtests page.
+- **Walk-forward** picks the best in-sample Sharpe among `backtest.variants` on 504-session windows, runs it on the next 126, and reports only the stitched out-of-sample curve.
+- **Sensitivity** flags a strategy as *fragile* if CAGR changes sign across reasonable settings.
+- **Event studies** now also report results by calendar year and by market regime (benchmark above or below its 200-day average), a bootstrap 95% CI, and fail a signal if one month drives more than 25% of the result.
+
 ## Pages
 
 - **Rankings**: bullish and bearish lists with score, confidence, agreement, a factor heat-map, conflicts and special situations.
@@ -197,6 +224,7 @@ agreement  = share of available factors with p > 60
 - **Derivatives**: participant index-futures positioning, NIFTY PCR and IV, and today's stock futures build-ups.
 - **Paper**: the paper-trade log, P&L after costs, equity curve, and process/auto buttons.
 - **Alerts**: the alert feed, Telegram status and test.
+- **Backtests**: run and compare portfolio backtests; equity vs Nifty 50/500, drawdown, years, walk-forward windows, sensitivity grid.
 - **Research**: each signal's event study, giving events, hit rate, 20-day excess return after costs, 95% range, sub-period results and a PASS/fail verdict with the reason.
 - **Overview**: data freshness per dataset (flags stale data), recent download errors, the source registry, and the active configuration.
 
@@ -242,6 +270,7 @@ backend/intel/
   paper.py          paper-trading engine
   alerts.py         alert generation + Telegram delivery
   daily.py          the daily job
+  backtest.py       portfolio backtests, walk-forward, sensitivity, metrics
   panel.py          universe + liquidity filters + indicators per stock/date
   research/         event study, signals, walk-forward, CLI
   api.py            /api/intel/* endpoints

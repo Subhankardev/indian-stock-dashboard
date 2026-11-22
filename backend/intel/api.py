@@ -581,3 +581,53 @@ async def alerts_test():
     if res.get("skipped"):
         raise HTTPException(400, res["skipped"] + " — set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in backend/.env")
     return res
+
+
+# ------------------------------------------------------------- Phase 8 --- #
+class _BacktestIn(BaseModel):
+    kind: str = "ranked"                 # ranked | signal | walk_forward | sensitivity
+    factors: Optional[list[str]] = None
+    signal: Optional[str] = None
+    top_k: Optional[int] = None
+    rebalance: Optional[int] = None
+
+
+@router.get("/backtests")
+def backtests_list():
+    from .backtest import list_runs
+    from .scoring import FACTORS
+    eng = db.engine()
+    b = load()["backtest"]
+    return {"runs": list_runs(eng), "factors": list(FACTORS), "signals": list(SIGNALS), "variants": b["variants"],
+            "defaults": {k: b[k] for k in ("top_k", "rebalance_sessions", "train_sessions", "test_sessions")},
+            "demo": _is_demo(eng)}
+
+
+@router.get("/backtests/{run_id}")
+def backtests_get(run_id: int):
+    from .backtest import get_run
+    r = get_run(db.engine(), run_id)
+    if r is None:
+        raise HTTPException(404, "no such backtest")
+    return r
+
+
+@router.post("/backtests")
+async def backtests_run(body: _BacktestIn):
+    """Run and store a portfolio backtest (may take a minute or more on full NSE history)."""
+    from .backtest import run
+    from .scoring import FACTORS
+    if body.kind not in ("ranked", "signal", "walk_forward", "sensitivity"):
+        raise HTTPException(422, "kind must be ranked, signal, walk_forward or sensitivity")
+    bad = [f for f in body.factors or [] if f not in FACTORS]
+    if bad:
+        raise HTTPException(422, f"unknown factors {bad}")
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    if panel.empty:
+        raise HTTPException(409, "No price data.")
+    try:
+        res = await run_in_threadpool(run, eng, panel, body.kind, body.factors, body.signal, body.top_k, body.rebalance)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    return res

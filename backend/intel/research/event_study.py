@@ -68,8 +68,17 @@ def _t_ci(values: np.ndarray) -> tuple[Optional[float], Optional[float], Optiona
     return t, m - 1.96 * se, m + 1.96 * se
 
 
+def _bootstrap_ci(by_day: pd.Series, n: int = 1000, seed: int = 7) -> list:
+    v = by_day.dropna().to_numpy()
+    if len(v) < 10:
+        return [None, None]
+    rng = np.random.default_rng(seed)
+    means = v[rng.integers(0, len(v), (n, len(v)))].mean(axis=1)
+    return [float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))]
+
+
 def summarize(events: pd.DataFrame, horizons: list[int], cost_pct: float, direction: str,
-              subperiods: int = 3) -> dict:
+              subperiods: int = 3, regime: Optional[pd.Series] = None) -> dict:
     sign = -1.0 if direction == "bearish" else 1.0
     res = {"events": int(len(events)), "direction": direction, "horizons": {}}
     if events.empty:
@@ -87,12 +96,21 @@ def summarize(events: pd.DataFrame, horizons: list[int], cost_pct: float, direct
         chunks = np.array_split(by_day.sort_index(), subperiods) if len(by_day) >= subperiods else [by_day]
         sub = [float(c.mean()) for c in chunks if len(c)]
         top_symbol_share = float(ev.groupby("symbol")["r"].sum().abs().max() / ev["r"].abs().sum()) if ev["r"].abs().sum() else 0.0
+        month = pd.to_datetime(ev["date"]).dt.to_period("M")
+        top_month_share = float(ev.groupby(month)["r"].sum().abs().max() / ev["r"].abs().sum()) if ev["r"].abs().sum() else 0.0
+        by_year = {str(y): float(g.mean()) for y, g in by_day.groupby(pd.to_datetime(by_day.index).year)}
+        by_regime = None
+        if regime is not None and len(regime):
+            lab = regime.reindex(pd.to_datetime(by_day.index), method="ffill")
+            by_regime = {str(k): {"mean": float(g.mean()), "days": int(len(g))}
+                         for k, g in pd.Series(by_day.to_numpy(), index=lab.to_numpy()).groupby(level=0)}
         res["horizons"][h] = {
             "n": int(len(ev)), "days": int(len(by_day)),
             "mean_excess_pct": float(ev["r"].mean()), "median_excess_pct": float(ev["r"].median()),
             "hit_rate": float((ev["r"] > 0).mean()),
             "day_mean_pct": float(by_day.mean()), "t_stat": t, "ci95": [lo, hi],
-            "subperiod_means": sub, "top_symbol_share": top_symbol_share,
+            "subperiod_means": sub, "top_symbol_share": top_symbol_share, "top_month_share": top_month_share,
+            "bootstrap_ci95": _bootstrap_ci(by_day), "by_year": by_year, "by_regime": by_regime,
         }
     return res
 
@@ -112,7 +130,16 @@ def passes(summary: dict, rules: dict) -> tuple[bool, str]:
         return False, f"positive in only {pos} of {len(s['subperiod_means'])} sub-periods"
     if s["top_symbol_share"] > 0.25:
         return False, f"one stock drives {s['top_symbol_share']:.0%} of the result"
+    if s.get("top_month_share", 0) > 0.25:
+        return False, f"one month drives {s['top_month_share']:.0%} of the result"
     return True, f"passes: {h}-day excess {s['day_mean_pct']:.2f}% per event-day, 95% range above 0, positive in {pos} sub-periods"
+
+
+def regime_series(bench: pd.Series) -> pd.Series:
+    """Per date: 'up' when the benchmark is above its 200-session average, else 'down'."""
+    b = bench.sort_index()
+    ma = b.rolling(200, min_periods=200).mean()
+    return pd.Series(np.where(b > ma, "up", "down"), index=pd.to_datetime(b.index))[ma.notna().to_numpy()]
 
 
 def run(panel: pd.DataFrame, mask: pd.Series, bench: pd.Series, rules: dict, direction: str = "bullish",
@@ -123,7 +150,8 @@ def run(panel: pd.DataFrame, mask: pd.Series, bench: pd.Series, rules: dict, dir
     fwd = forward_returns(panel, bench, horizons)
     ev_mask = first_in_run(mask, panel, cooldown)
     events = pd.concat([panel.loc[ev_mask, ["date", "symbol"]], fwd.loc[ev_mask]], axis=1)
-    summary = summarize(events, horizons, rules["cost_bps_round_trip"] / 100.0, direction, rules["subperiods"])
+    summary = summarize(events, horizons, rules["cost_bps_round_trip"] / 100.0, direction, rules["subperiods"],
+                        regime=regime_series(bench) if len(bench) else None)
     ok, why = passes(summary, rules)
     summary.update(passed=ok, verdict=why)
     return summary
