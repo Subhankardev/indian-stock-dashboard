@@ -18,7 +18,7 @@ Design, data sources, schema, methodology and roadmap: **[docs/DESIGN.md](docs/D
 | 5 | Point-in-time fundamentals (CSV import), sector-aware quality & valuation scores, market cap, fundamentals tested as a filter | done |
 | 6 | Multi-factor scoring (tested factors only, confidence, agreement, conflicts), market regime, breadth, sector strength, Rankings page, special situations | done |
 | 7 | Trade setups, sizing, costs, paper trading, alerts | next |
-| 8–9 | Fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
+| 8–9 | Portfolio backtests + walk-forward reports, research assistant | planned |
 
 ## Quick start (on your Mac)
 
