@@ -19,7 +19,7 @@ from sqlalchemy import func, select
 from . import db, evidence
 from .config import load
 from .panel import build_panel, latest_snapshot
-from .research.signals import EVIDENCE_CLASS, SIGNALS
+from .research.signals import EVIDENCE_CLASS, FILTER_BASE, SIGNALS
 from .sources import REGISTRY
 
 router = APIRouter(prefix="/api/intel", tags=["intel"])
@@ -29,7 +29,8 @@ _cache: dict = {}
 SCREEN_COLS = ["symbol", "industry", "close", "ret_1d", "rs_rank", "rs_1m", "rs_3m", "rs_6m", "rs_mom_20",
                "rsi14", "adx", "rvol20", "deliv_pct", "deliv_pct_avg20", "avg_value_cr", "atr_pct",
                "dist_52w_high_pct", "dma50", "dma200", "liquid", "d_score", "x_score",
-               "accumulation_score", "accumulation_confidence", "distribution_score", "distribution_confidence"]
+               "accumulation_score", "accumulation_confidence", "distribution_score", "distribution_confidence",
+               "pe", "pb", "mcap_cr", "roe_pct", "rev_growth_pct", "quality_score", "value_score"]
 
 
 def _clean(v):
@@ -162,7 +163,7 @@ def research():
         out.append(m)
     known = {n: {"direction": d, "description": desc, "evidence_class": EVIDENCE_CLASS.get(n)}
              for n, (_, d, desc) in SIGNALS.items()}
-    return {"demo": _is_demo(eng), "signals": known, "results": out,
+    return {"demo": _is_demo(eng), "signals": known, "results": out, "filters": FILTER_BASE,
             "rules": load()["research"]}
 
 
@@ -370,3 +371,34 @@ def orderflow_status():
     """Tick/order-book features and why each is off (needs a licensed feed)."""
     from .orderflow import status
     return status()
+
+
+# ------------------------------------------------------------- Phase 5 --- #
+@router.get("/stock/{symbol}/fundamentals")
+async def stock_fundamentals(symbol: str):
+    """Point-in-time fundamentals, valuation and sector-relative scores, with industry peers."""
+    from . import fundamentals as fa
+    eng = db.engine()
+    panel = await run_in_threadpool(panel_cached, eng)
+    sym = symbol.upper()
+    g = panel[panel["symbol"] == sym] if not panel.empty else panel
+    if g.empty:
+        raise HTTPException(404, f"No data for {sym}")
+    fa_cols = ["fa_effective", "fa_basis", "pe", "pb", "mcap_cr", "earnings_yield_pct", "roe_pct", "roce_pct",
+               "de_ratio", "ebitda_margin_pct", "pat_margin_pct", "cfo_to_pat", "rev_growth_pct", "pat_growth_pct",
+               "gnpa_pct", "quality_score", "value_score", "fa_sector_relative", "fa_financial"]
+    last = g.iloc[-1]
+    snap = latest_snapshot(panel)
+    peers = snap[(snap["industry"] == last["industry"])]
+    pit = fa.point_in_time(fa.load_long(eng, [sym]))
+    hist_cols = ["effective", "period_end", "basis", "ttm_revenue", "ttm_pat", "ttm_eps", "roe_pct", "de_ratio",
+                 "rev_growth_pct", "pat_growth_pct", "pat_margin_pct", "gnpa_pct"]
+    return {"symbol": sym, "as_of": _clean(last["date"]), "industry": last.get("industry"), "demo": _is_demo(eng),
+            "latest": {k: _clean(last[k]) for k in fa_cols if k in g},
+            "history": records(pit[[c for c in hist_cols if c in pit]].tail(12)) if len(pit) else [],
+            "peers": records(peers[["symbol", "close", "pe", "pb", "roe_pct", "rev_growth_pct", "quality_score",
+                                    "value_score"]].sort_values("quality_score", ascending=False, na_position="last")
+                             .head(15)) if "pe" in peers else [],
+            "sources": _sources_for(eng, ["fundamentals_import", "demo"]),
+            "note": "Point-in-time: each number is used only from its publication date. Financials skip leverage, "
+                    "EBITDA margin and cash conversion; asset quality (GNPA) is used when present."}

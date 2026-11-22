@@ -48,6 +48,26 @@ export default function Research() {
               </tr>);
           })}</tbody>
         </table>
+        {d.filters && Object.keys(d.filters).length > 0 && (
+          <>
+            <div className="section-label">Filters: does adding fundamentals improve the base signal?</div>
+            <table className="grid-table"><thead><tr><th>Filtered</th><th>Base</th><th className="num">Events (filtered / base)</th>
+              <th className="num">{h}D excess (filtered / base)</th><th>Verdict</th></tr></thead>
+              <tbody>{Object.entries(d.filters).map(([f, b]) => {
+                const rf = byName[f], rb = byName[b];
+                const sf = rf && rf.stats.horizons[h], sb = rb && rb.stats.horizons[h];
+                const better = sf && sb && sf.day_mean_pct !== undefined && sb.day_mean_pct !== undefined ? sf.day_mean_pct > sb.day_mean_pct : null;
+                return (
+                  <tr key={f}><td><b>{f}</b></td><td>{b}</td>
+                    <td className="num">{rf ? rf.stats.events : "–"} / {rb ? rb.stats.events : "–"}</td>
+                    <td className="num">{sf ? `${fmt(sf.day_mean_pct)}%` : "–"} / {sb ? `${fmt(sb.day_mean_pct)}%` : "–"}</td>
+                    <td>{better === null ? <span className="muted">run both</span>
+                      : better && rf.passed ? <span className="up">filter helps (and passes)</span>
+                      : better ? <span>higher mean, not significant</span>
+                      : <span className="down">filter does not help</span>}
+                      {rf && !rf.passed && <div className="muted small-text">filtered signal has not passed its own test</div>}</td></tr>);
+              })}</tbody></table>
+          </>)}
         {d.results[0] && <div className="provenance">Last run {d.results[0].run_at} UTC · period {d.results[0].period} · rules {d.results[0].rule_version}</div>}
       </div>
     </>

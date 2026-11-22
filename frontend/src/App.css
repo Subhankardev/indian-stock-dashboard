@@ -418,3 +418,5 @@ ul.evidence li { padding: 4px 0; }
 .pbar { height: 4px; background: #cbd5e1; border-radius: 1px; }
 .pbar.va { background: #93c5fd; }
 .pbar.poc { background: #2563eb; }
+.cls-Q { background: #ccfbf1; color: #115e59; }
+.grid-table tr.self { background: var(--primary-soft); }

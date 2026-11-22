@@ -4,6 +4,7 @@
     python -m intel.imports shareholding path/to/shareholding.csv
     python -m intel.imports mf path/to/mf_holdings.csv
     python -m intel.imports fii_dii path/to/fii_dii.csv
+    python -m intel.imports fundamentals path/to/fundamentals.csv
 
 Formats (header row required; extra columns ignored):
 
@@ -16,6 +17,9 @@ Formats (header row required; extra columns ignored):
 * mf: month_end, amc, scheme, symbol, shares[, market_value_cr][, published_on]
   (default published_on = month_end + 10 days, the SEBI deadline).
 * fii_dii: date, category (FII|DII), buy_value, sell_value, net_value  (₹ crore).
+* fundamentals: symbol, period_end, period_type (Q|A), metric, value[, published_on]
+  (see ``intel/fundamentals.py`` for metric names and units; default published_on =
+  period_end + 45 days for quarters, + 60 days for annual results).
 
 Each import is recorded in ``source_files`` with the file name and sha256.
 """
@@ -125,7 +129,37 @@ def import_fii_dii(eng, path) -> int:
     return len(out)
 
 
-IMPORTERS = {"deals": import_deals, "shareholding": import_shareholding, "mf": import_mf, "fii_dii": import_fii_dii}
+def import_fundamentals(eng, path) -> int:
+    from .fundamentals import METRICS
+    df, raw = _read(path)
+    _need(df, ["symbol", "period_end", "period_type", "metric", "value"], "fundamentals")
+    df["metric"] = df["metric"].str.strip().str.lower()
+    df["period_type"] = df["period_type"].str.strip().str.upper()
+    bad = set(df["period_type"]) - {"Q", "A"}
+    if bad:
+        raise ImportErrorCSV(f"period_type must be Q or A, got {sorted(bad)}")
+    unknown = sorted(set(df["metric"]) - set(METRICS))
+    out = pd.DataFrame({
+        "symbol": df["symbol"].str.strip().str.upper(),
+        "period_end": pd.to_datetime(df["period_end"]).dt.date,
+        "metric": df["period_type"] + ":" + df["metric"],
+        "value": pd.to_numeric(df["value"].astype(str).str.replace(",", ""), errors="coerce"),
+    })
+    lag = df["period_type"].map({"Q": 45, "A": 60})
+    pub = pd.to_datetime(df["published_on"], errors="coerce") if "published_on" in df else pd.Series(pd.NaT, index=df.index)
+    out["published_on"] = pub.fillna(pd.to_datetime(out["period_end"]) + pd.to_timedelta(lag, unit="D")).dt.date
+    src = _src(eng, "fundamentals_import", out["period_end"].max(), path, raw, len(out))
+    for (sym, pe), g in out.groupby(["symbol", "period_end"]):
+        db.replace_rows(eng, db.fundamentals, g.assign(source_id=src),
+                        [db.fundamentals.c.symbol == sym, db.fundamentals.c.period_end == pe,
+                         db.fundamentals.c.metric.in_(list(g["metric"]))])
+    if unknown:
+        print(f"note: stored but not scored: {unknown}")
+    return len(out)
+
+
+IMPORTERS = {"deals": import_deals, "shareholding": import_shareholding, "mf": import_mf, "fii_dii": import_fii_dii,
+             "fundamentals": import_fundamentals}
 
 
 def main(argv=None) -> int:

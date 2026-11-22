@@ -131,8 +131,33 @@ def make(n_symbols: int = 60, days: int = 600, seed: int = 11, end: date = date(
                          "opt_idx_call_short": 5e5, "opt_idx_put_short": 5e5, "opt_stk_call_long": 1e5,
                          "opt_stk_put_long": 1e5, "opt_stk_call_short": 1e5, "opt_stk_put_short": 1e5,
                          "total_long": 3e6, "total_short": 3e6})
+    # quarterly fundamentals (₹ crore; shares in crore), published 30-45 days after quarter end
+    fq = [q.date() for q in pd.date_range(dates[0] - pd.Timedelta(days=500), dates[-1], freq="QE")]
+    fa = []
+    for i_, s_ in enumerate(syms):
+        last_close = prices.loc[prices.symbol == s_, "close"].iloc[-1]
+        rev = float(rng.uniform(500, 20000)) / 4
+        margin = float(rng.uniform(0.05, 0.25))
+        shares = rev * 4 * margin * float(rng.uniform(12, 40)) / last_close  # crore shares → P/E ≈ 12-40
+        growth = float(rng.normal(0.03, 0.03))
+        equity = rev * 4 * rng.uniform(0.4, 1.5)
+        debt = equity * rng.uniform(0, 1.2)
+        fin = SECTORS[i_ % len(SECTORS)] == "Financial Services"
+        for q in fq:
+            rev *= np.exp(growth + rng.normal(0, 0.04))
+            pat = rev * margin * np.exp(rng.normal(0, 0.15))
+            equity += pat * 0.7
+            pub = (pd.Timestamp(q) + pd.Timedelta(days=int(rng.integers(30, 46)))).date()
+            vals = {"revenue": rev, "ebitda": rev * (margin + 0.08), "pat": pat, "eps": pat / shares,
+                    "interest": debt * 0.02, "total_equity": equity, "total_debt": debt,
+                    "cfo": pat * rng.uniform(0.6, 1.4), "shares": shares}
+            if fin:
+                vals.update(gnpa_pct=float(rng.uniform(0.5, 5)), nnpa_pct=float(rng.uniform(0.1, 2)))
+            for k, v in vals.items():
+                fa.append({"symbol": s_, "period_end": q, "metric": f"Q:{k}", "value": round(float(v), 4),
+                           "published_on": pub})
     return {"prices": prices, "indices": pd.concat(idx, ignore_index=True), "members": pd.DataFrame(members),
-            "deals": deals, "shareholding": pd.DataFrame(sh), "mf": pd.DataFrame(mf), "fii_dii": flows,
+            "fundamentals": pd.DataFrame(fa), "deals": deals, "shareholding": pd.DataFrame(sh), "mf": pd.DataFrame(mf), "fii_dii": flows,
             "deriv": pd.DataFrame(deriv), "participant_oi": pd.DataFrame(part)}
 
 
@@ -155,6 +180,9 @@ def seed(eng, data: dict | None = None) -> dict:
         db.replace_rows(eng, db.mf_holdings, data["mf"].assign(source_id=src), [db.mf_holdings.c.amc.like("DEMO%")])
         db.replace_rows(eng, db.fii_dii_daily, data["fii_dii"].assign(source_id=src),
                         [db.fii_dii_daily.c.date.in_(list(data["fii_dii"]["date"].unique()))])
+    if "fundamentals" in data:
+        db.replace_rows(eng, db.fundamentals, data["fundamentals"].assign(source_id=src),
+                        [db.fundamentals.c.symbol.like("DEMO%")])
     if "deriv" in data:
         db.replace_rows(eng, db.deriv_daily, data["deriv"].assign(source_id=src),
                         [db.deriv_daily.c.symbol.in_(list(data["deriv"]["symbol"].unique()))])

@@ -21,7 +21,7 @@ from ..panel import build_panel, load_index
 from . import event_study
 from .signals import SIGNALS
 
-RULE_VERSION = "p4.0"
+RULE_VERSION = "p5.0"
 
 
 def test_all(eng, cfg, names=None, start=None) -> dict:

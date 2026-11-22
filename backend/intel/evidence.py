@@ -219,9 +219,10 @@ def attach(eng, panel: pd.DataFrame) -> pd.DataFrame:
     if panel.empty:
         return panel
     from .derivatives import features as deriv_features
+    from .fundamentals import features as fa_features
     from .vwap import features as vwap_features
     return pd.concat([panel, inferred(panel), deal_features(eng, panel), ownership_features(eng, panel),
-                      deriv_features(eng, panel), vwap_features(panel)], axis=1)
+                      deriv_features(eng, panel), vwap_features(panel), fa_features(eng, panel)], axis=1)
 
 
 COMPONENT_SIGNALS = {
