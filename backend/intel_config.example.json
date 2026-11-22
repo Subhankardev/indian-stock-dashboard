@@ -1,0 +1,5 @@
+{
+  "universe": {"name": "nifty500"},
+  "liquidity": {"min_avg_traded_value_cr": 10, "min_avg_volume": 50000, "min_history_sessions": 200, "min_price": 20},
+  "research": {"cost_bps_round_trip": 30, "pass_min_events": 200}
+}

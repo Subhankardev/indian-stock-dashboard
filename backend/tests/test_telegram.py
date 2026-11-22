@@ -1,12 +1,7 @@
 import time
 
-import pytest
-from fastapi.testclient import TestClient
 
-from app.alerts import routes as alert_routes
-from app.alerts.engine import AlertScanner, AlertStore
 from app.alerts.telegram import TelegramNotifier, format_message
-from app.main import app
 
 TOKEN = "123456:SECRET-TOKEN-abcd"
 CONFIRMED = {"kind": "confirmed", "side": "BUY", "symbol": "RELIANCE", "price": 2950.5, "stop": 2890.0,
@@ -125,43 +120,3 @@ def test_find_chats_from_updates():
     assert chats == [{"chat_id": 42, "type": "private", "name": "Subhankar"},
                      {"chat_id": -100123, "type": "channel", "name": "Signals"}]
     assert s.calls[0][0].endswith("/getUpdates")
-
-
-def test_store_listener_errors_never_break_alerting(tmp_path):
-    store = AlertStore(tmp_path / "a.json")
-    store.listeners.append(lambda a: 1 / 0)
-    assert store.emit({"symbol": "X", "kind": "test", "side": "BUY"})["id"] == 1
-
-
-# ------------------------------------------------------------------ API ---- #
-def _api(tmp_path, tg):
-    store = AlertStore(tmp_path / "api.json")
-    alert_routes.reset_scanner(AlertScanner(store, lambda s: (None, None)), telegram=tg)
-    return TestClient(app)
-
-
-def test_api_reports_masked_status_and_relays_alerts(tmp_path):
-    s = FakeTelegram()
-    c = _api(tmp_path, notifier(s))
-    info = c.get("/api/alerts").json()["telegram"]
-    assert info["configured"] and info["token"] == "123456:…abcd" and TOKEN not in str(info)
-    c.post("/api/alerts/test")  # dashboard test alert also goes to Telegram
-    assert len(s.calls) == 1 and "Test alert" in s.calls[0][1]["text"]
-    r = c.post("/api/alerts/telegram/test")
-    assert r.status_code == 200 and r.json()["sent"] == 2
-
-
-def test_api_telegram_errors(tmp_path):
-    c = _api(tmp_path, TelegramNotifier(None, None, background=False))
-    assert c.post("/api/alerts/telegram/test").status_code == 400
-    assert c.get("/api/alerts/telegram/chats").status_code == 400
-    s = FakeTelegram([(401, {"ok": False, "description": "Unauthorized"})])
-    c = _api(tmp_path, notifier(s))
-    r = c.post("/api/alerts/telegram/test")
-    assert r.status_code == 502 and "Unauthorized" in r.json()["detail"]
-
-
-def test_api_lists_chats(tmp_path):
-    s = FakeTelegram([(200, {"ok": True, "result": []})])
-    body = _api(tmp_path, notifier(s)).get("/api/alerts/telegram/chats").json()
-    assert body["chats"] == [] and "Send any message" in body["hint"]

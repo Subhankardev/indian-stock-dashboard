@@ -15,9 +15,17 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-from app.wave_oi.oi import classify_regime
 
-# Price/OI quadrant in option-desk language.
+
+def classify_regime(price_change, oi_change, min_oi_change: float = 0.01) -> str:
+    """Price/OI build-up label (fractions, e.g. 0.012 = +1.2%). A build-up label describes
+    positioning in that contract only; it does not say who traded (not 'institutions')."""
+    if price_change is None or oi_change is None or price_change == 0 or abs(oi_change) < min_oi_change:
+        return "neutral"
+    if price_change > 0:
+        return "new_longs" if oi_change > 0 else "short_covering"
+    return "new_shorts" if oi_change > 0 else "long_liquidation"
+
 BUILDUP = {
     "new_longs": "Long build-up",
     "short_covering": "Short covering",

@@ -10,3 +10,4 @@ __pycache__/
 backend/.cache/
 backend/reports/
 backend/strategy.json
+backend/data/

@@ -10,7 +10,7 @@ from app.live.feeds import FEED_URL, FeedAuthError, MockFeed, UpstoxFeed
 from app.live.hub import LiveHub
 from app.live.session import LiveSession
 from app.main import app
-from app.wave_oi.oi import classify_regime
+from app.option_analytics import classify_regime
 
 
 def frame(key="NSE_FO|1", ltp=101.0, cp=100.0, oi=5000.0, vtt=77) -> bytes:

@@ -7,3 +7,4 @@ python-multipart
 websockets>=13
 protobuf>=4.25
 python-dotenv>=1.0
+sqlalchemy>=2.0

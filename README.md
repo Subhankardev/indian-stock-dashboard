@@ -1,320 +1,127 @@
-# Indian Stock Market Analytics Dashboard
+# Institutional Intelligence & Stock Selection (NSE)
 
-A full-stack web dashboard for real-time Indian stock market analytics, including buy/sell signals, technical analysis, and NSE option data.
+A research system for Indian equities. It downloads official NSE daily files, builds a survivorship-free universe with liquidity filters, computes indicators, relative strength and delivery analytics, and tests every signal on history before the signal is allowed to influence a ranking.
 
-## Features
+Design, data sources, schema, methodology and roadmap: **[docs/DESIGN.md](docs/DESIGN.md)**.
 
-- **Trending Stock Screener**: See which stocks are trending with signals (BUY/SELL/HOLD).
-- **Technical Indicators**: SMA, RSI, MACD, Bollinger Bands.
-- **Option ideas for buyers**: a suggested call/put strike, expiry and premium target/stop for every signal (see below).
-- **Buy/Sell Alerts**: watchlist scanner with forming / confirmed signal alerts, desktop notifications and Telegram (see below).
-- **Option Chain Analytics** (Upstox): PCR, max pain, OI walls, ATM IV and expected move, OI build-ups per strike (see below).
-- **Wave · GTI · OI Analysis**: Elliott wave structure, Ghost Trade Indicator and futures open interest combined into signals, with a backtest (see below).
-- **Real-Time**: Data updates every few minutes.
+> Research tool, not investment advice. It never places trades. Ordinary volume or delivery is never labelled as "institutional buying"; every data point carries its source file and date.
 
-## Tech Stack
+## Status
 
-- **Frontend**: React
-- **Backend**: FastAPI (Python)
-- **Data**: Upstox API (default) or NSE India (unofficial APIs)
-- **Deployment**: Docker
+| Phase | Scope | State |
+|---|---|---|
+| 0 | Design (docs/DESIGN.md) | done |
+| 1 | NSE download + provenance, universe, liquidity filters, indicators, relative strength, event-study / walk-forward backtest framework, screener / stock / research pages | done |
+| 2 | Delivery analytics, bulk/block deals with entity classes, FII/DII, shareholding, accumulation/distribution evidence | next |
+| 3–9 | Derivatives, VWAP/order flow, fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
 
-## Setup
+## Quick start (on your Mac)
 
-### Backend
-
-```bash
-cd backend
-docker build -t stock-backend .
-docker run -p 8000:8000 stock-backend
-```
-
-Or for dev:
+NSE blocks many cloud and VPN IP ranges, so run the download from your own network.
 
 ```bash
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env      # first time only: then put your tokens in .env
+pip install -r requirements-dev.txt
+```
+
+Download index lists and daily cash-market + index files since 2023 (about 1,000 files; paced at ≥0.5 s each, cached in `backend/data/raw/`):
+
+```bash
+python -m intel.ingest --lists --from 2023-01-01
+```
+
+After that, once a day after about 18:30 IST:
+
+```bash
+python -m intel.ingest --days 5 --today
+```
+
+Other datasets: `--datasets cm,indices,fo,participant_oi`. A 404 for a weekday is recorded as a holiday; a malformed file is recorded as an error with the reason (see the Overview page).
+
+Test the Phase 1 signals on the stored history:
+
+```bash
+python -m intel.research
+```
+
+Start the API and the dashboard:
+
+```bash
 uvicorn app.main:app --reload
 ```
 
-### Settings: `backend/.env`
-
-All settings live in `backend/.env`, which the backend reads at startup. Create it once from the template (`cp .env.example .env`) and fill in what you use:
-
-```ini
-UPSTOX_ACCESS_TOKEN=eyJ...          # regular token: daily; extended token: about a year
-TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
-TELEGRAM_CHAT_ID=7844852392
-```
-
-- **Restart the backend after editing `.env`**. `--reload` only watches the code.
-- `.env` is gitignored, so it can't be committed by accident. Never commit tokens.
-- A variable exported in your terminal overrides `.env`, which is handy for one-off runs like `DATA_SOURCE=nse uvicorn ...`.
-- **`http://localhost:8000/api/config`** shows every setting the backend sees and where it came from (`.env`, shell, or not set), with secrets masked. Check it first when something "isn't picking up" a setting.
-- The tests never read `.env`, so your real tokens are never used during `pytest`.
-- Long tokens copied from a chat or web page often carry invisible characters (zero-width spaces, soft hyphens) or stray quotes. The backend strips these automatically, and `/api/config` notes when it did.
-
-### Upstox login and token health
-
-The market-data APIs (live feed, option chain, expired-futures OI) need Upstox's **daily access token**, which expires around 03:30 IST every night. An *extended token* doesn't work for these: Upstox only accepts it for read-only account data (positions, holdings, orders).
-
-**One-click daily login (recommended):**
-1. In the Upstox developer console, open your app (or create one). Set its **redirect URL** to exactly `http://localhost:8000/api/upstox/callback`.
-2. Put the app's **API key** and **secret** in `backend/.env` as `UPSTOX_API_KEY=...` and `UPSTOX_API_SECRET=...`, then restart the backend.
-3. Each morning, click **Log in with Upstox** in the dashboard and sign in on Upstox's page. The backend exchanges the one-time code for the day's token, saves it to `backend/.env` and switches to it immediately: no restart, and open live feeds reconnect with the new token.
-
-**Token health:** `GET /api/upstox/status` makes one real market-data call to check the token. The top bar and a banner show the result:
-- **connected**, with the expiry time on hover
-- **limited token**: an extended token
-- **token expired**
-- **token invalid**, e.g. copied with masking dots `•••`
-- **no token**
-
-The check is cached for 5 minutes and re-runs when you come back to the dashboard tab.
-
-### Frontend
-
 ```bash
-cd frontend
-docker build -t stock-frontend .
-docker run -p 3000:3000 stock-frontend
+cd frontend && npm install && npm start
 ```
 
-Or for dev:
+Open http://localhost:3000.
 
-```bash
-npm install
-npm start
-```
-
-## Usage
-
-- Go to http://localhost:3000
-- Click any stock for details and option analytics, or type an NSE symbol and press **Analyze**.
-- Tick **demo data** to see the Wave · GTI · OI panel on synthetic data (useful when NSE blocks your network).
-
-## Buy/Sell alerts
-
-> **Paused by default.** On 2 years of NIFTY 50 history (Nov 2024 – Nov 2026, 308 trades) the signal rules lost money: about **−0.17R per trade** with a **30% win rate** (95% range of average R: −0.30 to −0.04). So the scanner sends nothing until you click **Resume anyway** in the alerts panel (or `POST /api/alerts/resume`). The signal and option-idea cards are labelled *experimental*. Run `python -m app.survey` to re-test; only resume for a rule set that **passes** there.
-
-
-The 🔔 **Signal alerts** panel watches a list of symbols and tells you when the Wave · GTI · OI rules fire a BUY or SELL. Code: `backend/app/alerts/`.
-
-**How it works:**
-- A scanner in the backend re-runs the strategy for each watched symbol. It runs **every minute while NSE is open** (Mon–Fri 09:15–15:30 IST) and every 10 minutes otherwise.
-- During market hours, the last daily bar is **today's forming bar**, built from Upstox's intraday candle and refreshed every 60 s. That gives three kinds of alert:
-  - **forming**: the signal would fire if the day closed at the current price. This is an early heads-up and can still change.
-  - **faded**: a forming signal disappeared, either intraday or because it didn't hold into the close.
-  - **confirmed**: the signal is on a completed daily bar. This is the one the backtest trades. Each confirmed signal is alerted once.
-- Every alert includes the price, stop, target and the reason (wave setup, GTI and OI state).
-
-**In the dashboard:**
-- Add symbols with **+ Watch SYMBOL** or the *add symbol* box; remove them with ×.
-- Click **Enable desktop notifications** once. On macOS, the browser also needs notifications allowed in *System Settings → Notifications*.
-- **Send test alert** checks that notifications and sound work. **Scan now** runs a scan straight away.
-- Clicking a notification opens that symbol.
-
-The dashboard tab must be open to receive notifications; the backend keeps scanning and records alerts either way. The watchlist and alert history are saved in `backend/.alerts.json` (gitignored), so a restart doesn't re-alert.
-
-### Telegram alerts (optional)
-
-Every alert can also go to Telegram, so it reaches your phone even when the dashboard is closed. This takes about 5 minutes to set up:
-
-1. In Telegram, message **@BotFather**, send `/newbot` and follow the prompts. It gives you a **bot token** like `123456:ABC-DEF…`.
-2. Open a chat with your new bot and send it any message, e.g. "hi".
-3. Put the token in `backend/.env` as `TELEGRAM_BOT_TOKEN=123456:ABC-DEF...` and restart the backend. Then open `http://localhost:8000/api/alerts/telegram/chats`, which lists your `chat_id`.
-4. Add `TELEGRAM_CHAT_ID=<that number>` to `backend/.env` and restart the backend. The alerts panel should say "Telegram alerts on". Click **Telegram test**, or call `POST /api/alerts/telegram/test`.
-
-Optional: `TELEGRAM_ALERT_KINDS=confirmed` sends only confirmed signals. The default is `forming,confirmed,faded,test`.
-
-- Messages are sent from a background thread, so a slow or unreachable Telegram never delays scanning.
-- If Telegram rate-limits a message, it is retried once.
-- A failure shows up in the alerts panel, and the alert is still recorded and shown in the dashboard.
-- The bot token never leaves the backend: the API shows it masked and removes it from error messages.
-
-**API:**
-- `GET /api/alerts?since=<id>`
-- `PUT /api/alerts/watchlist` with body `{"symbols": [...]}`
-- `POST` or `DELETE /api/alerts/watchlist/{symbol}`
-- `POST /api/alerts/scan`
-- `POST /api/alerts/test`
-- `GET /api/alerts/telegram/chats`
-- `POST /api/alerts/telegram/test`
-
-**Environment variables:** `ALERTS_FILE`, `ALERTS_ENABLED` (`0` turns the scanner off), `ALERTS_INTERVAL` (seconds while the market is open; default 60).
-
-## Option ideas for option buyers
-
-When there's a signal today, or an active wave-3 / wave-5 setup, the Wave · GTI · OI panel shows an **option idea**. The same idea is attached to *forming* and *confirmed* alerts, in both the dashboard and Telegram. Code: `backend/app/options_suggest.py`. Endpoint: `GET /api/options/{symbol}/suggest?side=BUY|SELL&target=&stop=`.
-
-- **Contract:** a **call** for BUY, a **put** for SELL. It uses the nearest expiry with at least **4 trading days** left, so time decay doesn't eat the move.
-- **Strike:** the liquid contract whose delta is closest to **0.60** (at-the-money to slightly in-the-money). It also shows an *aggressive* ~0.40-delta strike and a *conservative* ~0.75-delta one. Only contracts with delta between 0.15 and 0.90 are considered.
-- **Premium levels:**
-  - entry: the ask price
-  - target and stop: Black-Scholes estimates of the option at the underlying's wave target and stop, 2 trading days later, using the contract's implied volatility
-  - reward:risk in premium terms
-  - lot size, cost per lot and maximum loss per lot
-- **Warnings:**
-  - options expensive: implied volatility more than 1.3× the 20-day realised volatility
-  - a call or put **OI wall** between price and target (it must stand out from the other strikes)
-  - time decay of 4% of the premium or more per day
-  - a bid-ask spread over 3%
-  - thin liquidity
-  - premium reward smaller than risk
-- **Requirements:** the day's Upstox token, and only for F&O symbols. If an option idea can't be built, the alert still goes out without it.
-
-These are estimates, not quotes, and the option trades themselves aren't backtested yet. The backtest covers the underlying's signals only.
-
-## Option chain (Upstox)
-
-`GET /api/options/{symbol}?expiry=YYYY-MM-DD` works for stocks (`RELIANCE`) and indices (`NIFTY`, `BANKNIFTY`, `FINNIFTY`, …). Code: `backend/app/option_analytics.py`, with fetching in `backend/app/upstox_data.py`.
-
-- **Upstox expiries** come from the instrument file, which needs no token and also maps `NIFTY` → `NSE_INDEX|Nifty 50`. The chain itself comes from `GET /v2/option/chain` and **needs `UPSTOX_ACCESS_TOKEN`**. It is cached for 30 seconds, and the dashboard refreshes it every minute.
-- **Analytics:**
-  - put-call ratio by OI and by volume
-  - **max pain**
-  - **OI walls**: the biggest call OI at or above spot is resistance, and the biggest put OI at or below spot is support
-  - ATM IV, ATM straddle price and the **expected move** it implies
-  - biggest OI changes vs the previous day
-  - a per-contract **build-up** tag from that contract's price and OI change: long build-up, short build-up, short covering, long unwinding
-- Parameters: `expiry` (default: nearest), `source=upstox|nse|synthetic`, `window` (strikes either side of ATM in `rows`; `0` = all), `spot` (for `synthetic`).
-- The original response keys (`PCR`, `max_CE_OI_strike`, `max_PE_OI_strike`, `total_CE_OI`, `total_PE_OI`, `OI_data`) are still returned. With `DATA_SOURCE=nse`, the NSE chain goes through the same analytics and is now filtered to one expiry.
-- On the dashboard, the option chain panel has an expiry picker, summary cards and a strike table with OI bars centred on ATM. The "demo data" box shows a demo chain.
-
-## Wave Theory + Ghost Trade Indicator + Open Interest
-
-Code: `backend/app/wave_oi/`. Endpoint: `GET /api/wave-oi/{symbol}`. It uses daily equity prices plus stock-futures OI summed across expiries.
-
-### Data source: Upstox (default)
-
-Price and OI come from the [Upstox API](https://upstox.com/developer/api-documentation/api-overview) (`backend/app/upstox_data.py`):
-
-- Upstox's daily instrument file maps a symbol like `RELIANCE` to its equity and futures instrument keys.
-- Daily candles come from `/v3/historical-candle/...`, plus today's bar from the intraday endpoint. Each row is `[timestamp, open, high, low, close, volume, open_interest]`, so futures candles carry OI directly.
-- OI is summed across all futures contracts on the stock. That gives the total market position and smooths the month-end rollover.
-
-Configuration (in `backend/.env`; see `backend/.env.example`):
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `DATA_SOURCE` | `upstox` | `upstox` or `nse` (the old unofficial NSE endpoints) |
-| `UPSTOX_ACCESS_TOKEN` | *(empty)* | Optional. Candle data is public. Without a token, OI covers only the live futures contracts (about 3 months back). With a token, expired contracts are fetched through `/v2/expired-instruments/...` and OI history goes back further. A regular Upstox token expires daily; an *extended* token lasts about a year (treat it like a password). |
-| `UPSTOX_MAX_EXPIRED` | `24` | How many expired monthly contracts to pull |
-
-Set these in `backend/.env` (see *Settings* above) and restart the backend.
-
-On bars before OI history starts, signals are not OI-filtered, and the response's `warning` says from which date OI applies. `?source=upstox|nse|synthetic` overrides `DATA_SOURCE` for a single request.
-
-| Piece | What it does | File |
-|---|---|---|
-| **Swing pivots** | ZigZag with an ATR-scaled reversal (`zz_atr_mult`, default 2.5 × ATR). A pivot only counts once price has reversed from it, so there is no look-ahead. | `waves.py` |
-| **Elliott waves** | Checks the latest pivots against the impulse rules: wave 2 stays above wave 1's start, wave 3 is never the shortest, wave 4 doesn't overlap wave 1. Reports the active setup: **W3** (wave 2 done, ride wave 3), **W5** (wave 4 done, ride wave 5) or **ABC** (5 waves done, expect a correction). Each setup gets a Fibonacci target, a stop beyond the last pivot, the price that invalidates the count, and a 0–1 score for how closely the ratios match 0.618 / 1.618 / 0.382 / 1.0. | `waves.py` |
-| **Ghost Trade Indicator** | No public definition exists (the TradingView "GTI" scripts are closed source), so this is our own. An ATR trailing line on smoothed mid-price sets trend direction and timing, flipping on a close through the line. Its "ghost" part flags bars where OI jumps abnormally (z-score ≥ 2) while price barely moves: positions being built quietly. Where the bar closes within its range hints at which side is building. | `gti.py`, `oi.py` |
-| **Open interest** | Price/OI quadrant over 5 bars: `new_longs` (↑↑), `short_covering` (↑↓), `new_shorts` (↓↑), `long_liquidation` (↓↓). Also flags OI divergence: a new price extreme while OI is shrinking. | `oi.py` |
-| **Signal** | **BUY** when the wave setup points up, GTI is up, OI confirms (`new_longs` or a recent bullish ghost build-up) and reward:risk ≥ `min_rr` (default 1.5). **SELL** is the mirror image. | `strategy.py` |
-| **Backtest** | Fills at the next bar's open, sizes each trade to risk 1% of equity, checks the stop before the target within a bar, and exits on a GTI flip against the trade. Charges 5 bps per side. | `backtest.py` |
-
-Query parameters: `days`, `source=upstox|nse|synthetic`, `use_wave`, `use_oi`, `allow_short`, `min_rr`, `zz_atr_mult`, `risk_per_trade`, `fee_bps`.
-
-```bash
-curl "http://localhost:8000/api/wave-oi/RELIANCE?days=730"
-curl "http://localhost:8000/api/wave-oi/DEMO?source=synthetic"
-```
-
-If futures OI can't be fetched (for example a non-F&O stock), the analysis still runs without OI confirmation and the response includes a `warning`.
-
-### Live feed (Upstox WebSocket)
-
-The panel's top strip streams live data from the [Upstox Market Data Feed V3](https://upstox.com/developer/api-documentation/api-overview). Code is in `backend/app/live/`.
-
-```
-Upstox wss://api.upstox.com/v3/feed/market-data-feed   (protobuf, one connection, token stays on the server)
-        │
-   backend LiveHub   ── reference-counted subscriptions, latest-tick cache, reconnect with backoff
-        │
-   ws://localhost:8000/ws/live?symbols=RELIANCE   (JSON, one per browser tab)
-        │
-   LiveQuote strip in the Wave · GTI · OI panel
-```
-
-- For each symbol it streams the **equity** and its **near-month future** in `full` mode. The strip shows last price, change vs previous close, bid/ask, day O/H/L, volume, futures price and basis, and **live OI vs the previous day's OI**. It also shows a live price/OI read: fresh longs, short covering, fresh shorts or long liquidation (0.5% OI threshold).
-- It compares the live price with the levels from the daily analysis. You see a warning when price crosses the GTI line ("GTI flips if it closes here") or breaks the wave stop or target, and otherwise the % distance to each.
-- **Needs `UPSTOX_ACCESS_TOKEN`** on the backend. Without it the endpoint returns a clear error. In demo mode, or with `&source=mock`, a random-walk mock feed is used instead.
-- It uses its own small client rather than the Upstox SDK. The SDK doesn't install on Python 3.13 (it depends on the obsolete PyPI `uuid` package) and turns off TLS certificate checking. The protobuf schema comes from the SDK (MIT licence). A readable copy is in `app/live/MarketDataFeedV3.proto`.
-- `GET /api/live/status` shows the upstream connection state, subscribed keys and viewer count.
-
-Messages sent to the browser: `hello`, `tick` (`{symbol, leg: "EQ"|"FUT", tick, live}`), `feed_status`, `market_status`, `error`. See `app/live/routes.py`.
-
-### NIFTY 50 signal survey
-
-`python -m app.survey` (run in `backend/` with the virtualenv active and Upstox logged in) backtests the active rules on **every NIFTY 50 stock**. The list comes from NSE's official index file, with a built-in fallback. It reports:
-
-- **for each stock:**
-  - BUY and SELL **signals generated**
-  - signals per year
-  - **trades taken** (one position at a time)
-  - wins and **win rate**
-  - average and total R
-  - best and worst trade
-  - buy & hold over the same period
-- **all stocks pooled:** the win rate with its **95% confidence range**, the average R with its 95% range, how many stocks were profitable, and a plain-language verdict (positive edge / no clear edge / negative edge)
-- **rule variants:** the same pooled numbers for six rule sets:
-  - A: the current rules
-  - B: long only
-  - C: long only + 200-day trend filter
-  - D: C + trailing exit (no fixed target; the stop trails the GTI line)
-  - E: plain trend-following without waves or OI (long, 200-day trend, trailing exit)
-  - F: the GTI trend alone
-- **pass/fail:** a rule set **passes** only with 50+ trades, a 95% range for average R entirely above zero, and a positive average R in **both halves** of the period
-- **exclusions:** stocks with a one-day move over 35% (an unadjusted split or demerger, e.g. TMPV) are left out
-
-```bash
-python -m app.survey                      # NIFTY 50, ~3 years
-python -m app.survey --days 730           # ~2 years
-python -m app.survey --symbols RELIANCE,TCS,INFY
-```
-
-The first run makes many Upstox requests, so the client paces itself (about 8 per second, backing off when rate-limited) and fetches the last 12 expired futures per stock for OI history. Expect a few minutes; data is cached for the day. The report goes to `backend/reports/survey-<date>.md`, with a CSV of every stock.
-
-### Tuning the rules (walk-forward)
-
-`python -m app.tune` (run in `backend/` with the virtualenv active) tests 720 rule combinations on a basket of 10 liquid F&O symbols, using real Upstox history (about 3 years). It takes about 90 seconds.
-
-```bash
-python -m app.tune                     # report only, nothing changes
-python -m app.tune --apply             # also use the tuned rules everywhere (restart the backend)
-python -m app.tune --symbols NIFTY,BANKNIFTY,RELIANCE --days 1460
-python -m app.tune --reset             # back to the built-in rules
-```
-
-- **What's tuned:**
-  - swing size (`zz_atr_mult`)
-  - GTI distance (`gti_mult`)
-  - minimum reward:risk (`min_rr`)
-  - stop placement (`stop_mode`)
-  - whether OI must confirm (`use_oi`)
-  - whether to trade A-B-C corrections (`trade_corrections`)
-  - whether to exit on a GTI flip (`exit_on_gti_flip`)
-- **Measured in R** (profit ÷ amount risked, after fees), so symbols at different prices compare fairly.
-- **Walk-forward:** settings are *chosen* on the older ⅔ of each symbol's history, using an SQN score that needs at least 15 trades. They're *judged* on the most recent ⅓, which the search never sees. Only the out-of-sample numbers estimate future behaviour.
-- **The report** goes to `backend/reports/tuning-<date>.md`, with every combination in a CSV next to it. It compares default vs tuned rules, gives a per-symbol breakdown, and shows buy & hold over the same period.
-- **`--apply`** writes `backend/strategy.json`, a local, gitignored file. The dashboard, backtests and alert scanner then use those rules, and the backtest heading shows "tuned rules · <date>". Query parameters such as `?min_rr=` still override.
-
-### Tests
+### Without NSE access: demo data
 
 ```bash
 cd backend
-pip install -r requirements-dev.txt
+python -m intel.demo
+```
+
+```bash
+DATABASE_URL=sqlite:///data/demo.db uvicorn app.main:app --reload
+```
+
+Every page shows a **Demo data** banner while synthetic data is loaded.
+
+## Pages
+
+- **Screener**: the latest session for every liquid stock, sortable by RS rank, relative strength over 3/6 months, RS momentum, RVOL, delivery % and its 20-day average, RSI, ADX, distance from the 52-week high and average traded value. Filter by industry.
+- **Stock**: price with EMA 20 / 50 DMA / 200 DMA, volume, the RS line vs Nifty 50, daily delivery %, and the file the latest row came from. With an Upstox token, also the option chain.
+- **Research**: each signal's event study, giving events, hit rate, 20-day excess return after costs, 95% range, sub-period results and a PASS/fail verdict with the reason.
+- **Overview**: data freshness per dataset (flags stale data), recent download errors, the source registry, and the active configuration.
+
+## How signals are tested
+
+For each event, the study enters at the **next session's open** and exits at the close *h* sessions later. It subtracts the Nifty 500 return over the same span and 30 bps round-trip costs. Bearish signals are measured as shorts. Events on the same day are averaged first, so a market-wide day counts once.
+
+A signal **passes** only if all of these hold:
+- ≥200 events
+- the 95% range of the 20-day excess return is above zero
+- it is positive in ≥2 of 3 sub-periods
+- no single stock drives more than 25% of the result
+
+`intel/research/walkforward.py` chooses among rule variants using only past data and reports the out-of-sample result. Tests check that indicators don't use future data, that a planted effect is found, and that pure noise fails.
+
+## Configuration
+
+Copy `backend/intel_config.example.json` to `backend/intel_config.json` and change any value; no code changes are needed. You can set the universe (`all`, `nifty50`, `nifty100`, `nifty200`, `nifty500`, `fno`, `custom`), liquidity thresholds, RS windows and benchmark, research horizons, costs and pass rules, and scoring weights. Defaults are in `backend/intel/config.py`.
+
+Storage is SQLite at `backend/data/intel.db` by default. Set `DATABASE_URL=postgresql+psycopg://…` in `backend/.env` to use Postgres.
+
+## Code map
+
+```
+backend/intel/
+  sources.py        NSE URLs, paced/cached/retrying fetcher, source registry
+  parsers.py        validated parsers for each NSE file format (tested on real samples)
+  ingest.py         CLI: backfill + daily job, provenance in source_files
+  db.py             schema (SQLAlchemy Core)
+  indicators.py     trend, momentum, volatility, volume, delivery indicators
+  relative_strength.py  RS vs benchmark, cross-sectional rank, sector-relative
+  panel.py          universe + liquidity filters + indicators per stock/date
+  research/         event study, signals, walk-forward, CLI
+  api.py            /api/intel/* endpoints
+  demo.py           synthetic data (always labelled demo)
+backend/app/        FastAPI app, Upstox client and login, live feed, option-chain analytics, Telegram sender
+frontend/src/intel/ React pages
+```
+
+## Upstox (optional)
+
+The live feed (`/ws/live`) and the option chain on the stock page use Upstox's daily access token. Put `UPSTOX_API_KEY` and `UPSTOX_API_SECRET` in `backend/.env` (template: `backend/.env.example`), register `http://localhost:8000/api/upstox/callback` as your app's redirect URL, and open `http://localhost:8000/api/upstox/login` each morning. `GET /api/upstox/status` checks the token, and `GET /api/config` shows which settings the backend sees, with secrets masked. Never commit `.env`.
+
+## Tests
+
+```bash
+cd backend
 pytest
 ```
 
-The tests also cover the Upstox data and live-feed code against fake Upstox responses, and the browser WebSocket end to end in mock mode. Beyond that, they cover the wave rules and the setup levels, OI quadrants, GTI flips, backtest accounting and the API. One test checks for look-ahead: it computes signals on truncated history and requires them to match the full-history signals.
-
-> Educational tool, not investment advice. Wave counts are probabilistic and NSE endpoints are unofficial.
-
-## Notes
-
-- Option and equity data is fetched from NSE using unofficial endpoints and may be rate-limited.
-- For production, consider adding caching, error handling, and security enhancements.
+The tests never read your `.env` and never touch your real database.
