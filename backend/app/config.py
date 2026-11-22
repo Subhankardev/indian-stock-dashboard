@@ -24,6 +24,7 @@ ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 SETTINGS: dict[str, tuple[bool, str]] = {
     "DATABASE_URL": (True, "intel database (default sqlite:///backend/data/intel.db); postgresql://... for Postgres"),
     "INTEL_CONFIG": (False, "intel settings file (default backend/intel_config.json)"),
+    "ANTHROPIC_API_KEY": (True, "Claude API key for the research assistant (console.anthropic.com)"),
     "UPSTOX_ACCESS_TOKEN": (True, "Upstox token: live feed, option chain, longer OI history (expires daily)"),
     "UPSTOX_MAX_EXPIRED": (False, "expired futures contracts to pull for OI history (default 24)"),
     "UPSTOX_API_KEY": (False, "API key of your Upstox app - enables the 'Log in with Upstox' button"),
@@ -41,7 +42,7 @@ _cleaned: dict[str, int] = {}
 
 # Values that must be a single unbroken token: copy/paste junk is stripped from these.
 TOKEN_SETTINGS = ("UPSTOX_ACCESS_TOKEN", "UPSTOX_API_KEY", "UPSTOX_API_SECRET",
-                  "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")
+                  "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "ANTHROPIC_API_KEY")
 _QUOTES = "\"'\u2018\u2019\u201c\u201d`"
 
 

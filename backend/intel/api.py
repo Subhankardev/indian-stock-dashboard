@@ -631,3 +631,42 @@ async def backtests_run(body: _BacktestIn):
     except ValueError as exc:
         raise HTTPException(422, str(exc))
     return res
+
+
+# ------------------------------------------------------------- Phase 9 --- #
+class _AskIn(BaseModel):
+    question: str
+    history: list[dict] = []
+    effort: str = "high"
+
+
+@router.get("/assistant/status")
+def assistant_status():
+    from .assistant import MODEL, TOOLS, configured
+    return {"configured": configured(), "model": MODEL, "tools": [t["name"] for t in TOOLS]}
+
+
+@router.post("/assistant")
+async def assistant_ask(body: _AskIn):
+    """Ask the research assistant. Answers are grounded in this database through read-only tools."""
+    import anthropic
+    from .assistant import Tools, ask, configured
+    if not configured():
+        raise HTTPException(400, "Set ANTHROPIC_API_KEY in backend/.env and restart the backend.")
+    if body.effort not in ("low", "medium", "high", "xhigh", "max"):
+        raise HTTPException(422, "effort must be low, medium, high, xhigh or max")
+    q = body.question.strip()
+    if not q or len(q) > 4000:
+        raise HTTPException(422, "question must be 1-4000 characters")
+    eng = db.engine()
+    tools = Tools(eng, lambda: panel_cached(eng))
+    try:
+        return await run_in_threadpool(ask, q, body.history[-20:], tools, None, body.effort)
+    except anthropic.AuthenticationError:
+        raise HTTPException(401, "ANTHROPIC_API_KEY was rejected — check the key in backend/.env")
+    except anthropic.RateLimitError:
+        raise HTTPException(429, "Claude API rate limit reached — try again shortly")
+    except anthropic.APIStatusError as exc:
+        raise HTTPException(502, f"Claude API error {exc.status_code}: {exc.message}")
+    except anthropic.APIConnectionError:
+        raise HTTPException(502, "Could not reach the Claude API (network)")
