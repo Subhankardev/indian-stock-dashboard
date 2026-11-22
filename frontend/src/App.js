@@ -28,7 +28,7 @@ function App() {
       <main className="page">
         {tab === "overview" && <Overview />}
         {tab === "screener" && <Screener onOpen={open} />}
-        {tab === "stock" && symbol && <StockPage symbol={symbol} />}
+        {tab === "stock" && symbol && <StockPage symbol={symbol} onOpen={open} />}
         {tab === "institutional" && <Institutional onOpen={open} />}
         {tab === "derivatives" && <Derivatives onOpen={open} />}
         {tab === "research" && <Research />}

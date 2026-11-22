@@ -5,6 +5,7 @@ import OptionChainPanel from "../components/OptionChainPanel";
 import EvidencePanel from "./EvidencePanel";
 import FuturesPanel from "./FuturesPanel";
 import VwapPanel from "./VwapPanel";
+import FundamentalsPanel from "./FundamentalsPanel";
 
 const RANGES = [["3M", 63], ["6M", 126], ["1Y", 250], ["2Y", 500]];
 
@@ -12,7 +13,7 @@ function Stat({ label, value, tone, hint }) {
   return <div className="card" title={hint}><div className="muted small-text">{label}</div><div className={`big ${tone || ""}`}>{value}</div></div>;
 }
 
-export default function StockPage({ symbol }) {
+export default function StockPage({ symbol, onOpen }) {
   const [days, setDays] = useState(250);
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
@@ -77,6 +78,7 @@ export default function StockPage({ symbol }) {
       <VwapPanel symbol={symbol} days={days} />
       <EvidencePanel symbol={symbol} />
       <FuturesPanel symbol={symbol} />
+      <FundamentalsPanel symbol={symbol} onOpen={onOpen} />
       {d.source && (
         <div className="provenance">Latest price row from <b>{d.source.dataset}</b> file for {d.source.as_of},
           fetched {d.source.fetched_at} · {d.source.url}</div>

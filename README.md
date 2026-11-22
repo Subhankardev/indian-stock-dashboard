@@ -15,8 +15,9 @@ Design, data sources, schema, methodology and roadmap: **[docs/DESIGN.md](docs/D
 | 2 | Delivery analytics, bulk/block deals with entity classes, FII/DII, shareholding + MF imports, accumulation/distribution evidence (classes A–E), Institutional page | done |
 | 3 | F&O: futures build-ups (class F), basis, rollover, PCR, max-OI strikes, ATM IV, participant OI; Derivatives page | done |
 | 4 | Daily VWAP + anchored VWAPs, absorption proxy, intraday VWAP bands + volume profile (Upstox 1-min), order-flow features behind a flag | done |
-| 5 | Fundamentals (filings / CSV), sector-aware quality & valuation | next |
-| 6–9 | Fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
+| 5 | Point-in-time fundamentals (CSV import), sector-aware quality & valuation scores, market cap, fundamentals tested as a filter | done |
+| 6 | Scoring engine, market regime & sectors, ranked lists, special alerts | next |
+| 7–9 | Fundamentals, scoring, trade setups + paper trading, portfolio backtests, research assistant | planned |
 
 ## Quick start (on your Mac)
 
@@ -125,6 +126,22 @@ Every piece of accumulation/distribution evidence carries a class, shown whereve
 - **Intraday**: VWAP with ±1σ/±2σ bands and a volume profile (POC, 70% value area) from Upstox 1-minute candles. This is a bar approximation, not order flow.
 - **Order flow** (cumulative delta, large trades, order-book imbalance, tick absorption, icebergs) needs tick-by-tick or order-book data. It is **disabled**; the Overview page lists what each feature needs and why. Enable it with `"orderflow": {"enabled": true, "provider": ...}` once a licensed feed and its loader exist.
 
+## Fundamentals (Phase 5)
+
+There is no free bulk fundamentals API, and Screener.in has none (scraping it breaks its terms), so results come in as a CSV:
+
+```bash
+python -m intel.imports fundamentals fundamentals.csv   # symbol,period_end,period_type(Q|A),metric,value[,published_on]
+```
+
+- **Metrics**: `revenue, ebitda, pat, eps, interest, total_equity, total_debt, cfo, shares, gnpa_pct, nnpa_pct, car_pct`. Values are in ₹ crore, except shares (crore), EPS (₹) and percentages.
+- **Point-in-time**: a quarter counts from its `published_on` date. The default is period end + 45 days for quarters and + 60 days for annual results, the SEBI deadlines. TTM needs 4 published quarters, and figures go stale after 270 days without a new filing.
+- **Ratios**: ROE, ROCE, debt/equity, margins, cash conversion, YoY TTM growth. With price, also P/E, P/B, earnings and book yield, and **market cap**.
+- **Sector-aware**:
+  - Financials skip leverage, EBITDA margin and cash conversion, and use GNPA instead.
+  - Quality and value are percentiles **within the industry** when it has ≥5 stocks with data; otherwise they are ranked against the whole universe, and the page says so.
+- **Tested as a filter**: `rs_leaders_quality` and `breakout_volume_quality` are the base signals restricted to quality ≥60. The Research page compares each with its base.
+
 ## Pages
 
 - **Screener**: the latest session for every liquid stock, sortable by RS rank, relative strength over 3/6 months, RS momentum, RVOL, delivery % and its 20-day average, RSI, ADX, distance from the 52-week high and average traded value. Filter by industry.
@@ -169,6 +186,7 @@ backend/intel/
   vwap.py           daily rolling + anchored VWAP, absorption proxy
   intraday.py       1-minute VWAP bands and volume profile
   orderflow.py      tick/order-book features (feature-flagged, explain what they need)
+  fundamentals.py   point-in-time fundamentals, sector-relative quality/value
   panel.py          universe + liquidity filters + indicators per stock/date
   research/         event study, signals, walk-forward, CLI
   api.py            /api/intel/* endpoints

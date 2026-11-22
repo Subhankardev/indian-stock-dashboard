@@ -125,6 +125,28 @@ def above_avwap_52w_high(p: pd.DataFrame) -> pd.Series:
     return p["liquid"].fillna(False) & (prev < 0) & (p["dist_avwap_hi52_pct"] > 0)
 
 
+# ---- Phase 5: fundamentals as a filter --------------------------------------------------- #
+def _quality(p: pd.DataFrame, minimum: float = 60) -> pd.Series:
+    return (p["quality_score"].astype(float) >= minimum) if "quality_score" in p else pd.Series(False, index=p.index)
+
+
+def rs_leaders_quality(p: pd.DataFrame) -> pd.Series:
+    """rs_leaders filtered to sector-relative quality ≥60 — compare with rs_leaders alone."""
+    return rs_leaders(p) & _quality(p)
+
+
+def breakout_volume_quality(p: pd.DataFrame) -> pd.Series:
+    return breakout_volume(p) & _quality(p)
+
+
+def quality_value(p: pd.DataFrame) -> pd.Series:
+    """Top-30% quality and top-30% value within the sector, entering on the first day it qualifies."""
+    if "quality_score" not in p:
+        return pd.Series(False, index=p.index)
+    return (p["liquid"].fillna(False) & (p["quality_score"].astype(float) >= 70)
+            & (p["value_score"].astype(float) >= 70))
+
+
 SIGNALS: dict[str, tuple[Signal, str, str]] = {
     # name: (function, direction, description)
     "rs_leaders": (rs_leaders, "bullish", "Top-10% 6-month relative strength, RS rising"),
@@ -147,7 +169,13 @@ SIGNALS: dict[str, tuple[Signal, str, str]] = {
     "avwap_loss": (avwap_loss, "bearish", "Loses VWAP anchored at the 60-day volume spike on 1.2× volume"),
     "absorption_up": (absorption_up, "bullish", "Class D: 2× volume, narrow range, close in upper third (bar proxy)"),
     "above_avwap_52w_high": (above_avwap_52w_high, "bullish", "Closes above VWAP anchored at the 52-week high"),
+    "rs_leaders_quality": (rs_leaders_quality, "bullish", "rs_leaders with sector-relative quality ≥60 (filter test)"),
+    "breakout_volume_quality": (breakout_volume_quality, "bullish", "breakout_volume with quality ≥60 (filter test)"),
+    "quality_value": (quality_value, "bullish", "Top-30% quality and value within its sector"),
 }
+
+# For each filtered signal, the unfiltered base it should be compared with.
+FILTER_BASE = {"rs_leaders_quality": "rs_leaders", "breakout_volume_quality": "breakout_volume"}
 
 # Evidence class of each signal (docs/DESIGN.md §8); price/RS signals are technical (T).
 EVIDENCE_CLASS = {"rs_leaders": "T", "rs_laggards": "T", "breakout_volume": "T", "breakdown_volume": "T",
@@ -155,4 +183,5 @@ EVIDENCE_CLASS = {"rs_leaders": "T", "rs_laggards": "T", "breakout_volume": "T",
                   "delivery_spike_up": "D", "inst_deal_buy": "A", "inst_deal_sell": "A",
                   "ownership_increase": "B", "ownership_decrease": "B", "mf_adds": "B",
                   "long_buildup": "F", "short_buildup": "F", "short_covering": "F",
-                  "avwap_reclaim": "T", "avwap_loss": "T", "absorption_up": "D", "above_avwap_52w_high": "T"}
+                  "avwap_reclaim": "T", "avwap_loss": "T", "absorption_up": "D", "above_avwap_52w_high": "T",
+                  "rs_leaders_quality": "Q", "breakout_volume_quality": "Q", "quality_value": "Q"}

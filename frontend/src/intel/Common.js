@@ -77,6 +77,7 @@ export const CLASS_INFO = {
   E: "E · unclassified large activity — direction or identity unknown",
   F: "F · derivatives positioning (futures price/OI build-ups) — not who traded",
   T: "T · technical / relative-strength signal",
+  Q: "Q · fundamentals filter (point-in-time, sector-relative)",
 };
 
 export function ClassTag({ c }) {

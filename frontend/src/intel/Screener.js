@@ -6,7 +6,7 @@ const COLS = [
   ["symbol", "Symbol"], ["industry", "Industry"], ["close", "Close"], ["ret_1d", "1D"],
   ["rs_rank", "RS rank"], ["rs_3m", "RS 3M"], ["rs_6m", "RS 6M"], ["rs_mom_20", "RS mom"],
   ["rvol20", "RVOL"], ["deliv_pct", "Deliv %"], ["deliv_pct_avg20", "Deliv 20D"], ["rsi14", "RSI"],
-  ["adx", "ADX"], ["d_score", "Acc clues"], ["accumulation_score", "Acc score"], ["dist_52w_high_pct", "From 52W hi"], ["avg_value_cr", "Avg ₹cr/day"],
+  ["adx", "ADX"], ["d_score", "Acc clues"], ["accumulation_score", "Acc score"], ["pe", "P/E"], ["quality_score", "Quality"], ["value_score", "Value"], ["dist_52w_high_pct", "From 52W hi"], ["avg_value_cr", "Avg ₹cr/day"],
 ];
 
 function cell(k, r) {
@@ -22,6 +22,8 @@ function cell(k, r) {
     case "deliv_pct": case "deliv_pct_avg20": return fmt(v, 1);
     case "rsi14": case "adx": return fmt(v, 0);
     case "avg_value_cr": return fmt(v, 1);
+    case "pe": return fmt(v, 1);
+    case "quality_score": case "value_score": return fmt(v, 0);
     case "d_score": return v === null ? "–" : `${v}/5`;
     case "accumulation_score": return v === null ? <span className="muted" title="No accumulation component has passed its test">–</span> : fmt(v, 0);
     default: return fmt(v);

@@ -57,6 +57,7 @@ DEFAULTS: dict = {
             # F&O option rows are ~50-100k a day; only per-underlying summaries are kept unless True
             "store_option_rows": False},
     "orderflow": {"enabled": False, "provider": None},
+    "fundamentals": {"min_peers": 5, "max_age_days": 270, "quality_filter_min": 60},
     "derivatives": {"risk_free_rate": 0.065, "oi_change_window": 5, "min_oi_change_pct": 5.0,
                     "expiry_blackout_sessions": 3},
 }
