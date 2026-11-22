@@ -56,6 +56,24 @@ def option_analysis(
         raise HTTPException(status_code=404, detail=f"Empty option chain for {symbol} {chain.get('expiry')}")
     return analyze_chain(chain, window=window)
 
+@app.get("/", include_in_schema=False)
+def root():
+    """Landing page for the API (the dashboard itself runs at http://localhost:3000)."""
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse("""<!doctype html><meta charset="utf-8"><title>Backend running</title>
+<body style="font-family:-apple-system,sans-serif;max-width:640px;margin:40px auto;line-height:1.6">
+<h2>✅ Backend is running</h2>
+<p>This is the API server. The dashboard runs separately at
+<a href="http://localhost:3000">http://localhost:3000</a> (start it with <code>npm start</code> in <code>frontend/</code>).</p>
+<ul>
+<li><a href="/api/upstox/login">Log in with Upstox</a> (daily token)</li>
+<li><a href="/api/upstox/status">Upstox token status</a></li>
+<li><a href="/api/intel/status">Data freshness</a></li>
+<li><a href="/api/config">Settings the backend sees</a> (secrets masked)</li>
+<li><a href="/docs">API documentation</a></li>
+</ul></body>""")
+
+
 @app.get("/api/config")
 def config_status():
     """Which settings the backend sees and where each came from (secrets masked)."""
