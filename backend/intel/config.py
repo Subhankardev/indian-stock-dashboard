@@ -66,7 +66,17 @@ DEFAULTS: dict = {
     # equity delivery charges (verify with your broker); percentages are of turnover
     "costs": {"brokerage_per_order": 20.0, "brokerage_pct": 0.0, "stt_pct": 0.1, "exchange_pct": 0.00297,
               "sebi_per_crore": 10.0, "stamp_pct": 0.015, "gst_pct": 18.0, "dp_per_sell": 15.93,
-              "slippage_bps": 5.0},
+              "slippage_bps": 5.0,
+              # backtests: slippage by liquidity tier (design §11.4)
+              "slippage_bps_liquid": 10.0, "slippage_bps_mid": 30.0, "liquid_tier_cr": 100.0},
+    "backtest": {"top_k": 20, "rebalance_sessions": 5, "capacity_pct_of_value": 5.0, "max_positions": 20,
+                 "risk_free_pct": 6.5, "benchmarks": ["Nifty 50", "Nifty 500"],
+                 "train_sessions": 504, "test_sessions": 126,
+                 "variants": {"rs_momentum": ["relative_strength", "momentum"],
+                              "rs_momentum_accumulation": ["relative_strength", "momentum", "accumulation"],
+                              "quality_momentum": ["fundamentals", "momentum", "relative_strength"],
+                              "all_factors": ["accumulation", "relative_strength", "momentum", "volume_delivery",
+                                              "derivatives", "fundamentals", "valuation", "sector", "risk"]}},
     "alerts": {"kinds": ["special", "ranking_entry", "paper_open", "paper_fill", "paper_exit", "stale_data"],
                "top_n": 10, "stale_days": 4},
     "fundamentals": {"min_peers": 5, "max_age_days": 270, "quality_filter_min": 60},

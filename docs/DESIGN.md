@@ -235,7 +235,7 @@ agreement(i,t) = share of available factors with p_f > 60
 | 5 | Fundamentals from filings / CSV import, sector-aware quality & valuation | Tested as a filter — **built** |
 | 6 | Scoring engine with confidence, agreement, conflicts; ranked lists & special alerts | Only passed factors weighted — **built** |
 | 7 | Trade setups, ATR stops, sizing, exposure limits, costs, paper trading, alerts | Paper-trade log — **built** |
-| 8 | Full portfolio backtests, walk-forward reports, sensitivity | Report vs Nifty 50/500 |
+| 8 | Full portfolio backtests, walk-forward reports, sensitivity | Report vs Nifty 50/500 — **built** |
 | 9 | Research assistant grounded in the database | Answers cite stored data and evidence classes |
 
 ## 13. Infrastructure & subscription costs

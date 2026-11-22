@@ -195,6 +195,13 @@ signal_tests = Table(
     Column("passed", Integer),
 )
 
+backtest_runs = Table(
+    "backtest_runs", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("run_at", DateTime), Column("kind", String(20)), Column("name", Text),
+    Column("params", Text), Column("metrics", Text), Column("series", Text),   # JSON
+)
+
 intel_alerts = Table(
     "intel_alerts", meta,
     Column("id", Integer, primary_key=True, autoincrement=True),
