@@ -114,3 +114,20 @@ def test_daily_job_skips_upstox_without_token(monkeypatch, capsys):
     monkeypatch.setattr(ingest, "main", lambda argv=None: 0)
     daily.main()
     assert "Skipping Upstox" in capsys.readouterr().out
+
+
+def test_cli_tools_read_backend_env(tmp_path, monkeypatch):
+    """intel.* commands must see tokens saved in backend/.env (only the web server did before)."""
+    import importlib
+    import intel
+    from app import config
+    env = tmp_path / ".env"
+    env.write_text("UPSTOX_ACCESS_TOKEN=abc.def.ghi\n")
+    monkeypatch.delenv("UPSTOX_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("APP_SKIP_DOTENV", raising=False)
+    monkeypatch.setattr(config, "ENV_FILE", env)
+    monkeypatch.setattr(config.load_settings, "__defaults__", (env,))
+    importlib.reload(intel)
+    import os
+    assert os.environ.get("UPSTOX_ACCESS_TOKEN") == "abc.def.ghi"
+    monkeypatch.setenv("APP_SKIP_DOTENV", "1")
