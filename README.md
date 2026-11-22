@@ -19,7 +19,7 @@ Design, data sources, schema, methodology and roadmap: **[docs/DESIGN.md](docs/D
 | 6 | Multi-factor scoring (tested factors only, confidence, agreement, conflicts), market regime, breadth, sector strength, Rankings page, special situations | done |
 | 7 | Trade setups (ATR/swing stops, R targets), sizing, Indian delivery cost model, exposure limits, paper trading, alerts (+ Telegram), daily job | done |
 | 8 | Portfolio backtests (ranked and signal + stops), walk-forward, sensitivity, reports vs Nifty 50/500; event studies by year/regime with bootstrap CIs | done |
-| 9 | Research assistant grounded in the database | next |
+| 9 | Research assistant (Claude Opus 5.5) answering only from this database through 10 read-only tools, with evidence classes and dates | done |
 
 ## Quick start (on your Mac)
 
@@ -215,6 +215,29 @@ python -m intel.backtest --sensitivity --factors relative_strength,momentum     
 - **Sensitivity** flags a strategy as *fragile* if CAGR changes sign across reasonable settings.
 - **Event studies** now also report results by calendar year and by market regime (benchmark above or below its 200-day average), a bootstrap 95% CI, and fail a signal if one month drives more than 25% of the result.
 
+## Research assistant (Phase 9)
+
+Ask questions on the **Assistant** page, for example "Which stocks show the most accumulation evidence, and what class is it?" or "How did the best backtest do against Nifty 500?".
+
+- It uses **Claude Opus 5.5** (`claude-opus-5-5`) through the Anthropic Messages API, in a tool-use loop run by this backend. Add `ANTHROPIC_API_KEY=` to `backend/.env` (get a key at console.anthropic.com) and restart the backend.
+- **Grounded**: Claude can only call 10 read-only tools over this database:
+  - data status, market overview, screener, stock report, rankings
+  - institutional activity, derivatives, research results, backtests, paper trading
+
+  It doesn't browse the web and can't place orders. Each answer lists the tools it used and the tokens it spent.
+- **Grounding rules** in the system prompt:
+  - every figure must come from a tool result, with its date and evidence class
+  - inferred activity is called "possible", never "institutional buying"
+  - market-wide data is never attributed to a stock
+  - signals and factors that haven't passed their tests are labelled as such
+  - demo data is called out
+  - no investment advice
+- **Cost controls**:
+  - The system prompt, tools and conversation prefix are prompt-cached.
+  - Tool results are capped at 12k characters, with at most 12 tool rounds per question.
+  - Effort defaults to `high`; send `effort` in the request to change it.
+- If a request is declined by a safety classifier, it is retried server-side on the recommended fallback model (`fallbacks: "default"`).
+
 ## Pages
 
 - **Rankings**: bullish and bearish lists with score, confidence, agreement, a factor heat-map, conflicts and special situations.
@@ -225,6 +248,7 @@ python -m intel.backtest --sensitivity --factors relative_strength,momentum     
 - **Paper**: the paper-trade log, P&L after costs, equity curve, and process/auto buttons.
 - **Alerts**: the alert feed, Telegram status and test.
 - **Backtests**: run and compare portfolio backtests; equity vs Nifty 50/500, drawdown, years, walk-forward windows, sensitivity grid.
+- **Assistant**: ask questions; answers cite the data and evidence classes they used.
 - **Research**: each signal's event study, giving events, hit rate, 20-day excess return after costs, 95% range, sub-period results and a PASS/fail verdict with the reason.
 - **Overview**: data freshness per dataset (flags stale data), recent download errors, the source registry, and the active configuration.
 
@@ -271,6 +295,7 @@ backend/intel/
   alerts.py         alert generation + Telegram delivery
   daily.py          the daily job
   backtest.py       portfolio backtests, walk-forward, sensitivity, metrics
+  assistant.py      Claude research assistant: tools, grounding prompt, tool-use loop
   panel.py          universe + liquidity filters + indicators per stock/date
   research/         event study, signals, walk-forward, CLI
   api.py            /api/intel/* endpoints

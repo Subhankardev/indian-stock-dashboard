@@ -431,3 +431,22 @@ th.inactive { text-decoration: line-through; }
 .bt-form label { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text-2); }
 .bt-form select, .bt-form input { padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); max-width: 320px; }
 .bt-form input { width: 80px; }
+.assistant .chat { display: flex; flex-direction: column; gap: 12px; margin: 14px 0; max-height: 62vh; overflow-y: auto; }
+.examples { display: flex; flex-wrap: wrap; gap: 8px; }
+.examples .chip-btn { text-align: left; font-weight: 500; }
+.turn { display: flex; flex-direction: column; gap: 8px; }
+.bubble { padding: 10px 14px; border-radius: 12px; max-width: 92%; line-height: 1.5; }
+.bubble.user { align-self: flex-end; background: var(--primary); color: #fff; white-space: pre-wrap; }
+.bubble.bot { align-self: flex-start; background: var(--surface-2); border: 1px solid var(--border); }
+.md p { margin: 4px 0; }
+.md-li { margin: 2px 0 2px 6px; }
+.md-h { font-weight: 700; margin: 8px 0 4px; }
+.md-table { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre; overflow-x: auto; }
+.md-gap { height: 6px; }
+.trace { margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 6px; }
+.ask { display: flex; gap: 8px; align-items: flex-end; }
+.ask textarea { flex: 1; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); font: inherit; resize: vertical; background: var(--surface); }
+@media (max-width: 700px) { .bubble { max-width: 100%; } }
+.nav button { padding: 6px 7px; }
+.topbar { gap: 12px; }
+.topbar .search { min-width: 150px; flex: 1 1 150px; }
